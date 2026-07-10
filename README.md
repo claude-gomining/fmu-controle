@@ -55,6 +55,30 @@ O campo `senha_hash` **deve** ser gerado com `password_hash`. Senhas em texto pu
 - As respostas incluem `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options` e `Referrer-Policy`. Detalhes de erros internos são gravados no log do servidor (`error_log`) e nunca exibidos ao usuário.
 - Não use o usuário de teste `admin/admin123` em produção — ele existe apenas para a massa de teste local.
 
+## Cadastro dos usuários de acesso (FMU e Gomining)
+
+Para criar (ou atualizar) os usuários oficiais do portal, rode:
+
+```powershell
+php -d extension=.\vendor\php-ext\mongodb\php_mongodb.dll scripts\add-users.php
+```
+
+No Linux/macOS (com a extensão `mongodb` habilitada):
+
+```bash
+php scripts/add-users.php
+```
+
+O script cria os usuários `fmu` e `gomining` na collection `fmu_user_control`, pedindo a senha de cada um de forma interativa (mínimo 8 caracteres, com confirmação). A senha é gravada apenas como hash (`password_hash`) e o campo `ativo` é definido como `true`. Se o usuário já existir, a senha e os dados são atualizados — o script também serve para redefinir senhas.
+
+Para uso não interativo (automação), defina as senhas por variáveis de ambiente antes de rodar:
+
+```powershell
+$env:FMU_USER_PASSWORD="..."
+$env:GOMINING_USER_PASSWORD="..."
+php -d extension=.\vendor\php-ext\mongodb\php_mongodb.dll scripts\add-users.php
+```
+
 ## Massa de teste
 
 Com MongoDB e a extensão PHP `mongodb` habilitados, rode:
