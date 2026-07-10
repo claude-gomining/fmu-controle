@@ -1,0 +1,9 @@
+[
+  {
+    "usuario": "admin",
+    "nome": "Administrador",
+    "senha_hash": "$2y$12$tYYpLymlQdZ4TgOdr2l71e7j74SlpqQNiNoBOrFuW1SoSmHHtXqQS",
+    "ativo": true,
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  }
+]

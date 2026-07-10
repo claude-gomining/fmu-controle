@@ -1,0 +1,194 @@
+[
+  {
+    "nome_disciplina": "Matemática Aplicada I",
+    "bloco": "A",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0001",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Comunicação Empresarial",
+    "bloco": "A",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0002",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Lógica de Programação",
+    "bloco": "B",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0003",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Gestão de Projetos",
+    "bloco": "B",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0004",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Direito Digital",
+    "bloco": "C",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0005",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Estatística Básica",
+    "bloco": "C",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0006",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Arquitetura de Software",
+    "bloco": "D",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0007",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Marketing Estratégico",
+    "bloco": "D",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0008",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Banco de Dados",
+    "bloco": "A",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0009",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Experiência do Usuário",
+    "bloco": "A",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0010",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Cálculo Diferencial",
+    "bloco": "B",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0011",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Metodologia Científica",
+    "bloco": "B",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0012",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Sistemas Operacionais",
+    "bloco": "C",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0013",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Contabilidade Geral",
+    "bloco": "C",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0014",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Planejamento Financeiro",
+    "bloco": "D",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0015",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Psicologia Organizacional",
+    "bloco": "D",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0016",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Algoritmos Avançados",
+    "bloco": "A",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0017",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Ética Profissional",
+    "bloco": "A",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0018",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Redes de Computadores",
+    "bloco": "B",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0019",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Empreendedorismo",
+    "bloco": "B",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0020",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Análise de Dados",
+    "bloco": "C",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0021",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Inteligência Artificial",
+    "bloco": "C",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0022",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Segurança da Informação",
+    "bloco": "D",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0023",
+    "status": "Inativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  },
+  {
+    "nome_disciplina": "Governança de TI",
+    "bloco": "D",
+    "ano": 2026,
+    "codigo_disciplina": "FMU-0024",
+    "status": "Ativa",
+    "data": { "$date": "2026-07-09T12:00:00.000Z" }
+  }
+]
