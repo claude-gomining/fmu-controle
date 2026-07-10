@@ -79,6 +79,63 @@ $env:GOMINING_USER_PASSWORD="..."
 php -d extension=.\vendor\php-ext\mongodb\php_mongodb.dll scripts\add-users.php
 ```
 
+## Cadastro manual de usuários direto no MongoDB
+
+Se preferir criar os usuários direto no banco (via `mongosh`, Compass ou o Data Explorer do Atlas), siga os dois passos abaixo.
+
+### 1. Gerar o hash da senha
+
+O portal só aceita senhas com hash compatível com o `password_hash` do PHP — senha em texto puro é recusada no login. Gere o hash em qualquer máquina com PHP:
+
+```bash
+php -r "echo password_hash('SenhaEscolhidaAqui', PASSWORD_DEFAULT), PHP_EOL;"
+```
+
+A saída será algo como `$2y$12$k8jFqZ0iX9mYw3pL5cQnCu...`.
+
+> **Importante:** use o PHP para gerar o hash. Ferramentas online ou bibliotecas de outras linguagens (como o `bcrypt` do Node) geram hashes com prefixo `$2a$`/`$2b$`, que o portal rejeita — o hash precisa começar com `$2y$` (ou ser Argon2 gerado pelo PHP).
+
+### 2. Inserir o documento na collection `fmu_user_control`
+
+Com `mongosh`:
+
+```javascript
+use activity
+
+db.fmu_user_control.insertOne({
+  usuario: "fmu",
+  nome: "FMU",
+  senha_hash: "$2y$12$coleAquiOHashGeradoNoPasso1",
+  ativo: true,
+  data: new Date()
+})
+```
+
+Se o usuário já existir e você quiser apenas trocar a senha, use update com upsert (evita documento duplicado):
+
+```javascript
+db.fmu_user_control.updateOne(
+  { usuario: "fmu" },
+  { $set: { senha_hash: "$2y$12$novoHash...", ativo: true, data: new Date() } },
+  { upsert: true }
+)
+```
+
+No Compass ou no Atlas Data Explorer é equivalente: abra a collection `fmu_user_control` (banco `activity`), clique em "Insert Document" e cole o JSON com esses campos.
+
+### Regras que o documento precisa cumprir
+
+- `usuario` — é o login digitado no portal (os campos `username` ou `email` também são aceitos).
+- `senha_hash` — obrigatoriamente um hash gerado pelo `password_hash` (o nome de campo `password_hash` também é aceito). Nunca grave a senha em texto puro.
+- `ativo: true` — obrigatório. Usuário sem esse campo (ou com valor falso) não consegue entrar.
+- `nome` — opcional; é o que aparece no topo do portal após o login.
+
+Atenções práticas:
+
+- Cuidado com o `$` ao copiar o hash: dentro do `mongosh` entre aspas está seguro, mas em um shell bash com aspas duplas o `$2y$...` pode ser expandido e corromper o hash — use aspas simples.
+- Cada usuário deve ter seu próprio hash, mesmo que as senhas sejam iguais.
+- O script `scripts/add-users.php` (seção anterior) faz esses dois passos de uma vez; o caminho manual é útil quando há acesso direto ao banco, mas não é possível rodar o script.
+
 ## Massa de teste
 
 Com MongoDB e a extensão PHP `mongodb` habilitados, rode:
