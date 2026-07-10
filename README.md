@@ -38,15 +38,22 @@ O portal também consegue buscar, filtrar e exibir documentos que usem alguns no
 
 ### `fmu_user_control`
 
-Campos sugeridos para login:
+Campos usados para login:
 
-- `usuario`
+- `usuario` (ou `username` / `email`)
 - `nome`
-- `senha_hash`
-- `ativo`
+- `senha_hash` (ou `password_hash`)
+- `ativo` (ou `active`) — **obrigatório**: usuários sem esse campo (ou com valor falso) não conseguem entrar
 - `data`
 
-O campo `senha_hash` deve ser gerado com `password_hash`. O portal também reconhece `username`, `email`, `password_hash`, `senha` e `password` para facilitar migrações.
+O campo `senha_hash` **deve** ser gerado com `password_hash`. Senhas em texto puro não são aceitas — documentos legados com os campos `senha`/`password` em texto puro precisam ser migrados para hash antes do login funcionar.
+
+## Segurança
+
+- O login é limitado por tentativas: após 5 falhas para o mesmo usuário+IP (ou 30 falhas por IP) o acesso fica bloqueado por 15 minutos. Configurável via `LOGIN_MAX_ATTEMPTS`, `LOGIN_IP_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_SECONDS` e `LOGIN_THROTTLE_DIR` (diretório gravável onde o estado do bloqueio é salvo; padrão: diretório temporário do sistema).
+- O cookie de sessão é emitido com `HttpOnly`, `SameSite=Lax` e `Secure` (quando servido por HTTPS). Em produção, sirva o portal **sempre por HTTPS**.
+- As respostas incluem `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options` e `Referrer-Policy`. Detalhes de erros internos são gravados no log do servidor (`error_log`) e nunca exibidos ao usuário.
+- Não use o usuário de teste `admin/admin123` em produção — ele existe apenas para a massa de teste local.
 
 ## Massa de teste
 

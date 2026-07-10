@@ -1,0 +1,6 @@
+# Logs
+*.log
+*.err
+
+# Estado do rate limiter (dev local)
+fmu_login_throttle_*.json

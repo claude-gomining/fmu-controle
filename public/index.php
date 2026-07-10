@@ -7,12 +7,22 @@ require_once __DIR__ . '/../src/Auth.php';
 require_once __DIR__ . '/../src/MongoConnection.php';
 require_once __DIR__ . '/../src/DisciplineRepository.php';
 require_once __DIR__ . '/../src/UserRepository.php';
+require_once __DIR__ . '/../src/LoginRateLimiter.php';
 
 $config = require __DIR__ . '/../config/config.php';
 
 date_default_timezone_set($config['timezone']);
 session_name($config['session_name']);
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '',
+    'secure' => is_https(),
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
+send_security_headers();
 
 $auth = new Auth();
 $error = null;
@@ -28,7 +38,8 @@ try {
         $repository = new DisciplineRepository($connection);
     }
 } catch (Throwable $exception) {
-    $error = $exception->getMessage();
+    error_log('Falha ao conectar ao MongoDB: ' . $exception->getMessage());
+    $error = 'Não foi possível conectar ao banco de dados. Tente novamente mais tarde.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -40,6 +51,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'login') {
+        $username = is_string($_POST['username'] ?? null) ? trim($_POST['username']) : '';
+        $password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
+
+        $userLimiter = new LoginRateLimiter(
+            $config['security']['throttle_dir'],
+            $config['security']['login_max_attempts'],
+            $config['security']['login_lockout_seconds']
+        );
+        $ipLimiter = new LoginRateLimiter(
+            $config['security']['throttle_dir'],
+            $config['security']['login_ip_max_attempts'],
+            $config['security']['login_lockout_seconds']
+        );
+        $userKey = 'user|' . mb_strtolower($username) . '|' . client_ip();
+        $ipKey = 'ip|' . client_ip();
+
+        if ($userLimiter->isBlocked($userKey) || $ipLimiter->isBlocked($ipKey)) {
+            flash_set('error', 'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.');
+            redirect_to('index.php');
+        }
+
         try {
             $userConnection = new MongoConnection(
                 $config['mongo']['uri'],
@@ -47,20 +79,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $config['mongo']['user_collection']
             );
             $users = new UserRepository($userConnection);
-            $verifiedUser = $users->verifyCredentials(
-                (string) ($_POST['username'] ?? ''),
-                (string) ($_POST['password'] ?? '')
-            );
+            $verifiedUser = $users->verifyCredentials($username, $password);
 
             if ($verifiedUser !== null) {
+                $userLimiter->clear($userKey);
+                $ipLimiter->clear($ipKey);
                 $auth->loginAs($verifiedUser);
                 redirect_to('index.php');
             }
         } catch (Throwable $exception) {
-            flash_set('error', 'Não foi possível validar o login: ' . $exception->getMessage());
+            error_log('Falha ao validar login: ' . $exception->getMessage());
+            flash_set('error', 'Não foi possível validar o login. Tente novamente mais tarde.');
             redirect_to('index.php');
         }
 
+        $userLimiter->registerFailure($userKey);
+        $ipLimiter->registerFailure($ipKey);
         flash_set('error', 'Usuário ou senha inválidos.');
         redirect_to('index.php');
     }
@@ -109,7 +143,8 @@ if ($auth->check() && $repository && !$error) {
         $pagination = $repository->paginate($criteria, $page, $perPage);
         $blocks = $repository->distinctBlocks();
     } catch (Throwable $exception) {
-        $error = $exception->getMessage();
+        error_log('Falha ao consultar disciplinas: ' . $exception->getMessage());
+        $error = 'Não foi possível carregar as disciplinas. Tente novamente mais tarde.';
     }
 }
 

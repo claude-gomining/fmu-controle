@@ -24,4 +24,11 @@ return [
         'activity_collection' => env_value('MONGODB_ACTIVITY_COLLECTION', 'fmu_activity_control'),
         'user_collection' => env_value('MONGODB_USER_COLLECTION', 'fmu_user_control'),
     ],
+
+    'security' => [
+        'login_max_attempts' => max(1, (int) env_value('LOGIN_MAX_ATTEMPTS', '5')),
+        'login_ip_max_attempts' => max(1, (int) env_value('LOGIN_IP_MAX_ATTEMPTS', '30')),
+        'login_lockout_seconds' => max(60, (int) env_value('LOGIN_LOCKOUT_SECONDS', '900')),
+        'throttle_dir' => env_value('LOGIN_THROTTLE_DIR', sys_get_temp_dir()),
+    ],
 ];

@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 final class UserRepository
 {
+    /**
+     * Hash sem correspondência possível, usado para equalizar o tempo de resposta
+     * quando o usuário não existe ou não possui hash válido.
+     */
+    private const DUMMY_HASH = '$2y$12$zSvufOGsz4Ge2DzXWqGzcupadq0Tbrj28.xHmMFkjWG08VMBfuuXa';
+
     public function __construct(private readonly MongoConnection $connection)
     {
     }
@@ -30,27 +36,35 @@ final class UserRepository
         $user = current($cursor->toArray());
 
         if (!is_object($user) || !$this->isActive($user)) {
+            password_verify($password, self::DUMMY_HASH);
+
             return null;
         }
 
-        $storedPassword = $this->firstValue($user, ['senha_hash', 'password_hash', 'senha', 'password']);
+        $storedHash = $this->firstValue($user, ['senha_hash', 'password_hash']);
 
-        if ($storedPassword === '' || !$this->passwordMatches($password, $storedPassword)) {
+        if (!$this->isSupportedHash($storedHash)) {
+            password_verify($password, self::DUMMY_HASH);
+
+            return null;
+        }
+
+        if (!password_verify($password, $storedHash)) {
             return null;
         }
 
         return $this->firstValue($user, ['nome', 'name', 'usuario', 'username', 'email']) ?: $username;
     }
 
-    private function passwordMatches(string $password, string $storedPassword): bool
+    private function isSupportedHash(string $storedHash): bool
     {
-        $info = password_get_info($storedPassword);
-
-        if ($info['algo'] !== 0) {
-            return password_verify($password, $storedPassword);
+        if ($storedHash === '') {
+            return false;
         }
 
-        return hash_equals($storedPassword, $password);
+        $algo = password_get_info($storedHash)['algo'] ?? null;
+
+        return $algo !== null && $algo !== 0;
     }
 
     private function isActive(object $user): bool
@@ -75,7 +89,7 @@ final class UserRepository
             }
         }
 
-        return true;
+        return false;
     }
 
     private function firstValue(object $document, array $fields): string
