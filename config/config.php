@@ -25,6 +25,15 @@ return [
         'user_collection' => env_value('MONGODB_USER_COLLECTION', 'fmu_user_control'),
     ],
 
+    'lti_control' => [
+        'base_url' => env_value(
+            'LTI_CONTROL_BASE_URL',
+            'http://prd-lti-activity-control.eba-ikyyadp3.us-east-2.elasticbeanstalk.com'
+        ),
+        'institution' => env_value('LTI_CONTROL_INSTITUTION', 'fmu'),
+        'timeout_seconds' => max(1, (int) env_value('LTI_CONTROL_TIMEOUT_SECONDS', '5')),
+    ],
+
     'security' => [
         'login_max_attempts' => max(1, (int) env_value('LOGIN_MAX_ATTEMPTS', '5')),
         'login_ip_max_attempts' => max(1, (int) env_value('LOGIN_IP_MAX_ATTEMPTS', '30')),

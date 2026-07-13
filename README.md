@@ -21,6 +21,32 @@ $env:MONGODB_USER_COLLECTION="fmu_user_control"
 
 Use a URI real apenas no ambiente local/servidor. Não grave credenciais reais no código ou no README.
 
+## Integração com o serviço LTI de controle de atividades
+
+Sempre que disciplinas são ativadas ou desativadas no portal, é enviado um `PUT` para o serviço LTI de controle:
+
+- Ativação: `{base_url}/v1/control/enable/list`
+- Desativação: `{base_url}/v1/control/disable/list`
+
+Payload enviado (os códigos vêm do campo `codigo_disciplina` das disciplinas selecionadas):
+
+```json
+{
+    "activityId": "codigo1,codigo2,codigo3",
+    "institution": "fmu"
+}
+```
+
+Configuração por variáveis de ambiente (valores padrão já apontam para produção):
+
+```powershell
+$env:LTI_CONTROL_BASE_URL="http://prd-lti-activity-control.eba-ikyyadp3.us-east-2.elasticbeanstalk.com"
+$env:LTI_CONTROL_INSTITUTION="fmu"
+$env:LTI_CONTROL_TIMEOUT_SECONDS="5"
+```
+
+Se o serviço LTI estiver indisponível, a alteração de status no banco **é mantida** e o portal exibe um aviso pedindo para tentar novamente; o detalhe do erro fica registrado no `error_log` do servidor. O envio usa `allow_url_fopen` (habilitado por padrão no PHP).
+
 ## Collections
 
 ### `fmu_activity_control`

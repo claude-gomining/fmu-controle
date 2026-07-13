@@ -47,15 +47,7 @@ final class DisciplineRepository
 
     public function updateStatus(array $ids, string $status): int
     {
-        $objectIds = [];
-
-        foreach ($ids as $id) {
-            try {
-                $objectIds[] = new MongoDB\BSON\ObjectId((string) $id);
-            } catch (Throwable) {
-                continue;
-            }
-        }
+        $objectIds = $this->toObjectIds($ids);
 
         if ($objectIds === []) {
             return 0;
@@ -74,6 +66,48 @@ final class DisciplineRepository
         $result = $this->connection->manager()->executeBulkWrite($this->connection->namespace(), $bulk);
 
         return $result->getModifiedCount();
+    }
+
+    /**
+     * Retorna os códigos de disciplina (codigo_disciplina) dos documentos
+     * correspondentes aos _ids informados.
+     */
+    public function findCodesByIds(array $ids): array
+    {
+        $objectIds = $this->toObjectIds($ids);
+
+        if ($objectIds === []) {
+            return [];
+        }
+
+        $query = new MongoDB\Driver\Query(['_id' => ['$in' => $objectIds]]);
+        $cursor = $this->connection->manager()->executeQuery($this->connection->namespace(), $query);
+        $codes = [];
+
+        foreach ($cursor as $document) {
+            $code = $this->firstValue($document, ['codigo_disciplina', 'Codigo da Disciplina', 'Código da Disciplina']);
+
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    private function toObjectIds(array $ids): array
+    {
+        $objectIds = [];
+
+        foreach ($ids as $id) {
+            try {
+                $objectIds[] = new MongoDB\BSON\ObjectId((string) $id);
+            } catch (Throwable) {
+                continue;
+            }
+        }
+
+        return $objectIds;
     }
 
     public function distinctBlocks(): array

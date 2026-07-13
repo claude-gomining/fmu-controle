@@ -8,6 +8,7 @@ require_once __DIR__ . '/../src/MongoConnection.php';
 require_once __DIR__ . '/../src/DisciplineRepository.php';
 require_once __DIR__ . '/../src/UserRepository.php';
 require_once __DIR__ . '/../src/LoginRateLimiter.php';
+require_once __DIR__ . '/../src/ActivityControlNotifier.php';
 
 $config = require __DIR__ . '/../config/config.php';
 
@@ -120,9 +121,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $selectedIds = $_POST['discipline_ids'] ?? [];
         $selectedIds = is_array($selectedIds) ? $selectedIds : [];
+        $codes = $repository->findCodesByIds($selectedIds);
         $modifiedCount = $repository->updateStatus($selectedIds, $targetStatus);
 
-        flash_set('success', $modifiedCount . ' disciplina(s) atualizada(s).');
+        $notified = true;
+
+        if ($codes !== []) {
+            $notifier = new ActivityControlNotifier(
+                $config['lti_control']['base_url'],
+                $config['lti_control']['institution'],
+                $config['lti_control']['timeout_seconds']
+            );
+
+            $notified = $targetStatus === 'Ativa'
+                ? $notifier->notifyEnabled($codes)
+                : $notifier->notifyDisabled($codes);
+        }
+
+        if ($notified) {
+            flash_set('success', $modifiedCount . ' disciplina(s) atualizada(s).');
+        } else {
+            flash_set('error', $modifiedCount . ' disciplina(s) atualizada(s), mas não foi possível notificar o serviço de correção automática. Tente novamente ou contate o suporte.');
+        }
+
         redirect_to(current_url());
     }
 }
