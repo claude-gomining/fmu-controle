@@ -60,6 +60,8 @@ Campos usados pela aplicação:
 - `status` (`Ativa` ou `Inativa`)
 - `data`
 
+Apenas `codigo_disciplina` e `status` são realmente necessários. Documentos que tenham somente esses dois campos continuam aparecendo na listagem, podem ser selecionados e ativados/desativados normalmente — os campos ausentes (nome, bloco, ano) são exibidos como `—`.
+
 O portal também consegue buscar, filtrar e exibir documentos que usem alguns nomes legados com maiúsculas, como `Nome da disciplina`, `Bloco`, `Código da Disciplina` e `Status`, mas as atualizações gravam nos campos canônicos `status` e `data`.
 
 ### `fmu_user_control`

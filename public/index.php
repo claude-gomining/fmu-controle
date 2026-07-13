@@ -312,14 +312,15 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
 
                             <?php foreach ($pagination['items'] as $discipline): ?>
                                 <?php $isActive = strtolower($discipline['status']) === 'ativa' || strtolower($discipline['status']) === 'ativo'; ?>
+                                <?php $label = $discipline['nome_disciplina'] !== '' ? $discipline['nome_disciplina'] : $discipline['codigo_disciplina']; ?>
                                 <tr>
                                     <td class="select-col">
-                                        <input type="checkbox" name="discipline_ids[]" value="<?= e($discipline['id']) ?>" aria-label="Selecionar <?= e($discipline['nome_disciplina']) ?>">
+                                        <input type="checkbox" name="discipline_ids[]" value="<?= e($discipline['id']) ?>" aria-label="Selecionar <?= e($label) ?>">
                                     </td>
-                                    <td class="name-cell"><?= e($discipline['nome_disciplina']) ?></td>
-                                    <td><?= e($discipline['bloco']) ?></td>
-                                    <td><?= e($discipline['ano']) ?></td>
-                                    <td><code><?= e($discipline['codigo_disciplina']) ?></code></td>
+                                    <td class="name-cell"><?= e(text_or_dash($discipline['nome_disciplina'])) ?></td>
+                                    <td><?= e(text_or_dash($discipline['bloco'])) ?></td>
+                                    <td><?= e(text_or_dash($discipline['ano'])) ?></td>
+                                    <td><code><?= e(text_or_dash($discipline['codigo_disciplina'])) ?></code></td>
                                     <td>
                                         <span class="status-badge <?= $isActive ? 'is-active' : 'is-inactive' ?>">
                                             <?= e($discipline['status'] ?: 'Sem status') ?>

@@ -49,6 +49,11 @@ function flash_get(): ?array
     return $flash;
 }
 
+function text_or_dash(string $value): string
+{
+    return $value !== '' ? $value : '—';
+}
+
 function is_https(): bool
 {
     if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {

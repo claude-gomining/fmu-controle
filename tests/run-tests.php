@@ -11,6 +11,7 @@ require_once __DIR__ . '/../src/helpers.php';
 require_once __DIR__ . '/../src/LoginRateLimiter.php';
 require_once __DIR__ . '/../src/MongoConnection.php';
 require_once __DIR__ . '/../src/UserRepository.php';
+require_once __DIR__ . '/../src/DisciplineRepository.php';
 
 $failures = 0;
 $assertions = 0;
@@ -35,6 +36,11 @@ echo "helpers: escape de HTML\n";
 check(e('<script>alert(1)</script>') === '&lt;script&gt;alert(1)&lt;/script&gt;', 'escapa tags HTML');
 check(e('"aspas" \'simples\'') === '&quot;aspas&quot; &#039;simples&#039;', 'escapa aspas duplas e simples');
 check(e(123) === '123', 'aceita valores não-string');
+
+echo "helpers: text_or_dash\n";
+check(text_or_dash('') === '—', 'string vazia vira traço');
+check(text_or_dash('Bloco A') === 'Bloco A', 'valor preenchido é mantido');
+check(text_or_dash('0') === '0', 'valor "0" é mantido (não é vazio)');
 
 echo "helpers: CSRF\n";
 $token = csrf_token();
@@ -122,6 +128,19 @@ check($isActive((object) ['ativo' => 0]) === false, 'ativo=0 bloqueia');
 check($isActive((object) ['ativo' => 'sim']) === true, 'ativo="sim" permite');
 check($isActive((object) ['ativo' => 'nao']) === false, 'ativo="nao" bloqueia');
 check($isActive((object) ['active' => true]) === true, 'campo legado active=true permite');
+
+echo "DisciplineRepository: documento mínimo (só codigo_disciplina + status)\n";
+$disciplineRepo = (new ReflectionClass(DisciplineRepository::class))->newInstanceWithoutConstructor();
+$normalize = fn (object $doc): array => (new ReflectionMethod(DisciplineRepository::class, 'normalizeDocument'))->invoke($disciplineRepo, $doc);
+
+$minimal = $normalize((object) ['codigo_disciplina' => 'FMU-0001', 'status' => 'Ativa']);
+check($minimal['codigo_disciplina'] === 'FMU-0001', 'código é preservado no documento mínimo');
+check($minimal['status'] === 'Ativa', 'status é preservado no documento mínimo');
+check($minimal['nome_disciplina'] === '' && $minimal['bloco'] === '' && $minimal['ano'] === '', 'campos ausentes viram string vazia (não somem)');
+check(array_keys($minimal) === ['id', 'nome_disciplina', 'bloco', 'ano', 'codigo_disciplina', 'status'], 'documento mínimo produz todas as colunas da tabela');
+
+$buildFilter = fn (array $criteria): array => (new ReflectionMethod(DisciplineRepository::class, 'buildFilter'))->invoke($disciplineRepo, $criteria);
+check($buildFilter(['search' => '', 'block' => '', 'status' => '']) === [], 'sem filtros retorna filtro vazio (todos os documentos, inclusive os mínimos)');
 
 echo "config: seção de segurança\n";
 $config = require __DIR__ . '/../config/config.php';

@@ -25,7 +25,11 @@ final class DisciplineRepository
         $skip = ($page - 1) * $perPage;
 
         $query = new MongoDB\Driver\Query($filter, [
-            'sort' => ['nome_disciplina' => 1, 'Nome da disciplina' => 1],
+            'sort' => [
+                'nome_disciplina' => 1,
+                'Nome da disciplina' => 1,
+                'codigo_disciplina' => 1,
+            ],
             'skip' => $skip,
             'limit' => $perPage,
         ]);
