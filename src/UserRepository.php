@@ -14,7 +14,10 @@ final class UserRepository
     {
     }
 
-    public function verifyCredentials(string $username, string $password): ?string
+    /**
+     * @return array{usuario: string, nome: string}|null
+     */
+    public function verifyCredentials(string $username, string $password): ?array
     {
         $username = trim($username);
 
@@ -53,7 +56,10 @@ final class UserRepository
             return null;
         }
 
-        return $this->firstValue($user, ['nome', 'name', 'usuario', 'username', 'email']) ?: $username;
+        $login = $this->firstValue($user, ['usuario', 'username', 'email']) ?: $username;
+        $display = $this->firstValue($user, ['nome', 'name']) ?: $login;
+
+        return ['usuario' => $login, 'nome' => $display];
     }
 
     private function isSupportedHash(string $storedHash): bool

@@ -114,6 +114,55 @@ final class DisciplineRepository
         return $objectIds;
     }
 
+    /**
+     * Insere apenas as disciplinas cujo codigo_disciplina ainda não existe,
+     * com status "Ativa". Disciplinas já cadastradas não são alteradas.
+     * Usa $setOnInsert com upsert, então é idempotente e seguro para
+     * reenvios do mesmo arquivo.
+     *
+     * @param list<array<string, mixed>> $activities
+     * @return int Quantidade efetivamente inserida (novas disciplinas)
+     */
+    public function insertNewActivities(array $activities): int
+    {
+        $bulk = new MongoDB\Driver\BulkWrite();
+        $queued = 0;
+
+        foreach ($activities as $activity) {
+            $codigo = trim((string) ($activity['codigo_disciplina'] ?? ''));
+
+            if ($codigo === '') {
+                continue;
+            }
+
+            $bulk->update(
+                ['$or' => [
+                    ['codigo_disciplina' => $codigo],
+                    ['Codigo da Disciplina' => $codigo],
+                    ['Código da Disciplina' => $codigo],
+                ]],
+                ['$setOnInsert' => [
+                    'codigo_disciplina' => $codigo,
+                    'nome_disciplina' => (string) ($activity['nome_disciplina'] ?? ''),
+                    'bloco' => (string) ($activity['bloco'] ?? ''),
+                    'ano' => $activity['ano'] ?? '',
+                    'status' => 'Ativa',
+                    'data' => new MongoDB\BSON\UTCDateTime((int) (microtime(true) * 1000)),
+                ]],
+                ['upsert' => true]
+            );
+            $queued++;
+        }
+
+        if ($queued === 0) {
+            return 0;
+        }
+
+        $result = $this->connection->manager()->executeBulkWrite($this->connection->namespace(), $bulk);
+
+        return $result->getUpsertedCount();
+    }
+
     public function distinctBlocks(): array
     {
         $values = [];

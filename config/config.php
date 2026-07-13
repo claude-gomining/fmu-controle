@@ -25,6 +25,22 @@ return [
         'user_collection' => env_value('MONGODB_USER_COLLECTION', 'fmu_user_control'),
     ],
 
+    'admin' => [
+        // Logins com acesso à página de administração (comparação sem distinção de maiúsculas).
+        'users' => array_values(array_filter(
+            array_map(
+                static fn (string $user): string => mb_strtolower(trim($user)),
+                explode(',', (string) env_value('ADMIN_USERS', 'gomining'))
+            ),
+            static fn (string $user): bool => $user !== ''
+        )),
+    ],
+
+    'upload' => [
+        'max_bytes' => max(1024, (int) env_value('UPLOAD_MAX_BYTES', (string) (5 * 1024 * 1024))),
+        'max_rows' => max(1, (int) env_value('UPLOAD_MAX_ROWS', '10000')),
+    ],
+
     'lti_control' => [
         'base_url' => env_value(
             'LTI_CONTROL_BASE_URL',

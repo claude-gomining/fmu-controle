@@ -21,6 +21,31 @@ $env:MONGODB_USER_COLLECTION="fmu_user_control"
 
 Use a URI real apenas no ambiente local/servidor. Não grave credenciais reais no código ou no README.
 
+## Página de administração (upload de planilha)
+
+A página `admin.php` permite cadastrar disciplinas em massa a partir de uma planilha. **O acesso é restrito ao login da Gomining** — os demais usuários recebem "Acesso restrito" (HTTP 403). Os logins com acesso são configuráveis pela variável `ADMIN_USERS` (lista separada por vírgula; padrão `gomining`).
+
+O arquivo deve ser um **CSV separado por ponto-e-vírgula** (no Excel em português: *Arquivo → Salvar como → CSV*). A primeira linha é obrigatoriamente o cabeçalho, nesta ordem exata:
+
+```
+CRT;DISCIPLINA;BLOCO;ANO
+```
+
+- `CRT` — nome/código da oferta, usado como identificador único (gravado em `codigo_disciplina`)
+- `DISCIPLINA` — nome da disciplina (`nome_disciplina`)
+- `BLOCO` — bloco (`bloco`)
+- `ANO` — ano (`ano`)
+
+Cada linha corresponde a uma disciplina. Regras de importação:
+
+- Cada célula sofre `trim` (espaços no início/fim são removidos).
+- Disciplinas cujo `CRT` (codigo_disciplina) **ainda não existe** são adicionadas com status **`Ativa`**.
+- Disciplinas já cadastradas (mesmo `CRT`) **não são alteradas**.
+- Linhas em branco são ignoradas; linhas sem `CRT` são reportadas como ignoradas; `CRT` repetido no próprio arquivo é reportado como duplicado (só a primeira ocorrência é considerada).
+- Arquivos salvos em Windows-1252 (Latin-1) e com BOM UTF-8 são tratados automaticamente.
+
+Limites configuráveis: `UPLOAD_MAX_BYTES` (padrão 5 MB) e `UPLOAD_MAX_ROWS` (padrão 10000).
+
 ## Integração com o serviço LTI de controle de atividades
 
 Sempre que disciplinas são ativadas ou desativadas no portal, é enviado um `PUT` para o serviço LTI de controle:

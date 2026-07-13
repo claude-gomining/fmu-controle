@@ -2,30 +2,8 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../src/helpers.php';
-require_once __DIR__ . '/../src/Auth.php';
-require_once __DIR__ . '/../src/MongoConnection.php';
-require_once __DIR__ . '/../src/DisciplineRepository.php';
-require_once __DIR__ . '/../src/UserRepository.php';
-require_once __DIR__ . '/../src/LoginRateLimiter.php';
-require_once __DIR__ . '/../src/ActivityControlNotifier.php';
+[$config, $auth] = require __DIR__ . '/../src/bootstrap.php';
 
-$config = require __DIR__ . '/../config/config.php';
-
-date_default_timezone_set($config['timezone']);
-session_name($config['session_name']);
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path' => '/',
-    'domain' => '',
-    'secure' => is_https(),
-    'httponly' => true,
-    'samesite' => 'Lax',
-]);
-session_start();
-send_security_headers();
-
-$auth = new Auth();
 $error = null;
 $repository = null;
 
@@ -85,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($verifiedUser !== null) {
                 $userLimiter->clear($userKey);
                 $ipLimiter->clear($ipKey);
-                $auth->loginAs($verifiedUser);
+                $auth->loginAs($verifiedUser['usuario'], $verifiedUser['nome']);
                 redirect_to('index.php');
             }
         } catch (Throwable $exception) {
@@ -221,6 +199,9 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
             </div>
             <nav aria-label="Navegação principal">
                 <a class="nav-link active" href="index.php">Disciplinas</a>
+                <?php if ($auth->isAdmin($config['admin']['users'])): ?>
+                    <a class="nav-link" href="admin.php">Administração</a>
+                <?php endif; ?>
             </nav>
             <form method="post" class="logout-form">
                 <input type="hidden" name="action" value="logout">
