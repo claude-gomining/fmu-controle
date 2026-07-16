@@ -46,6 +46,30 @@ Cada linha corresponde a uma disciplina. Regras de importação:
 
 Limites configuráveis: `UPLOAD_MAX_BYTES` (padrão 5 MB) e `UPLOAD_MAX_ROWS` (padrão 10000).
 
+## Página Canvas (controle de cursos por blueprint)
+
+A página `canvas.php` é uma segunda interface (layout próprio) para clientes que usam o Canvas. A partir do código de uma **blueprint** (ID do curso da blueprint no Canvas), o portal busca todos os cursos associados e os cadastra para controle de correção.
+
+Configuração por variáveis de ambiente:
+
+```powershell
+$env:CANVAS_BASE_URL="https://afya.test.instructure.com"
+$env:CANVAS_API_TOKEN="<token de acesso do Canvas>"
+$env:MONGODB_CANVAS_COLLECTION="canvas_blueprints"   # collection própria
+$env:CANVAS_PAGE_SIZE="10"                            # blueprints por página
+```
+
+> **Nunca** grave o token do Canvas no código ou no repositório — use apenas `CANVAS_API_TOKEN`. O token concede acesso à API do Canvas; trate-o como segredo e rotacione-o se for exposto.
+
+Fluxo:
+
+- **Cadastrar blueprint:** informe o código (apenas números). O portal chama a API do Canvas (`/api/v1/courses/{id}/blueprint_templates/default/associated_courses`), seguindo automaticamente a paginação (header `Link`), grava tudo no banco e volta para a lista. Durante a busca, uma tela de **"Aguarde"** é exibida.
+- **Listagem:** as blueprints aparecem paginadas, cada uma com seus cursos encadeados (nome, ID do curso, SIS, termo, data de coleta e status). Há um campo de **filtro por ID ou nome** de curso.
+- **Ativar/desativar:** por curso (seleção múltipla) ou a blueprint inteira (selecionar todos). O status é gravado apenas no banco (sem chamadas externas).
+- **Atualizar:** cada blueprint tem um botão que rebusca no Canvas os cursos — os novos entram como `Ativa`, os já existentes mantêm o status atual, e os que saíram da blueprint são preservados.
+
+Os dados ficam em uma collection própria (`canvas_blueprints`), com cada documento representando uma blueprint e seus cursos embutidos. A página exige login (qualquer usuário autenticado do portal).
+
 ## Integração com o serviço LTI de controle de atividades
 
 Sempre que disciplinas são ativadas ou desativadas no portal, é enviado um `PUT` para o serviço LTI de controle:

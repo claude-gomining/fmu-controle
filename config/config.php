@@ -25,6 +25,16 @@ return [
         'user_collection' => env_value('MONGODB_USER_COLLECTION', 'fmu_user_control'),
     ],
 
+    'canvas' => [
+        'base_url' => env_value('CANVAS_BASE_URL', 'https://afya.test.instructure.com'),
+        'token' => env_value('CANVAS_API_TOKEN', ''),
+        'timeout_seconds' => max(1, (int) env_value('CANVAS_TIMEOUT_SECONDS', '20')),
+        'per_page' => min(100, max(1, (int) env_value('CANVAS_PER_PAGE', '100'))),
+        'max_pages' => max(1, (int) env_value('CANVAS_MAX_PAGES', '200')),
+        'collection' => env_value('MONGODB_CANVAS_COLLECTION', 'canvas_blueprints'),
+        'page_size' => max(1, (int) env_value('CANVAS_PAGE_SIZE', '10')),
+    ],
+
     'admin' => [
         // Logins com acesso à página de administração (comparação sem distinção de maiúsculas).
         'users' => array_values(array_filter(
