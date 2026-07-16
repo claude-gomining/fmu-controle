@@ -49,6 +49,31 @@ final class Auth
         return $username !== null && in_array(mb_strtolower($username), $adminUsers, true);
     }
 
+    /**
+     * Painéis liberados para o usuário logado.
+     *
+     * @param array<string, list<string>> $panelMap login (minúsculas) => painéis
+     * @return list<string>
+     */
+    public function panels(array $panelMap): array
+    {
+        $username = $this->username();
+
+        if ($username === null) {
+            return [];
+        }
+
+        return $panelMap[mb_strtolower($username)] ?? [];
+    }
+
+    /**
+     * @param array<string, list<string>> $panelMap
+     */
+    public function canAccess(string $panel, array $panelMap): bool
+    {
+        return in_array($panel, $this->panels($panelMap), true);
+    }
+
     public function logout(): void
     {
         $_SESSION = [];

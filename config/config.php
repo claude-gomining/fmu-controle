@@ -35,6 +35,14 @@ return [
         'page_size' => max(1, (int) env_value('CANVAS_PAGE_SIZE', '10')),
     ],
 
+    // Painéis liberados por login (fixos). 'fmu' = painel de disciplinas da FMU;
+    // 'afya' = painel de cursos do Canvas. gomining acessa os dois.
+    'panels' => [
+        'fmu' => ['fmu'],
+        'afya' => ['afya'],
+        'gomining' => ['fmu', 'afya'],
+    ],
+
     'admin' => [
         // Logins com acesso à página de administração (comparação sem distinção de maiúsculas).
         'users' => array_values(array_filter(

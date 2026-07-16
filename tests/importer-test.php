@@ -149,6 +149,39 @@ check((new Auth())->isAdmin(['gomining']) === false, 'sessão sem username não 
 $_SESSION = [];
 check((new Auth())->isAdmin(['gomining']) === false, 'sessão sem login não é admin');
 
+echo "Auth: painéis por login (fmu / afya / gomining)\n";
+$panelMap = [
+    'fmu' => ['fmu'],
+    'afya' => ['afya'],
+    'gomining' => ['fmu', 'afya'],
+];
+
+$_SESSION = ['user' => 'FMU', 'username' => 'fmu'];
+$fmu = new Auth();
+check($fmu->canAccess('fmu', $panelMap) === true, 'fmu acessa o painel da FMU');
+check($fmu->canAccess('afya', $panelMap) === false, 'fmu NÃO acessa o painel da Afya');
+check($fmu->panels($panelMap) === ['fmu'], 'fmu tem apenas o painel fmu');
+
+$_SESSION = ['user' => 'Afya', 'username' => 'afya'];
+$afya = new Auth();
+check($afya->canAccess('afya', $panelMap) === true, 'afya acessa o painel da Afya');
+check($afya->canAccess('fmu', $panelMap) === false, 'afya NÃO acessa o painel da FMU');
+
+$_SESSION = ['user' => 'Gomining', 'username' => 'gomining'];
+$gomining = new Auth();
+check($gomining->canAccess('fmu', $panelMap) === true, 'gomining acessa o painel da FMU');
+check($gomining->canAccess('afya', $panelMap) === true, 'gomining acessa o painel da Afya');
+check($gomining->panels($panelMap) === ['fmu', 'afya'], 'gomining tem os dois painéis');
+
+$_SESSION = ['user' => 'Gomining', 'username' => 'GoMining'];
+check((new Auth())->canAccess('afya', $panelMap) === true, 'lookup de painel é sem distinção de maiúsculas');
+
+$_SESSION = ['user' => 'Desconhecido', 'username' => 'zzz'];
+check((new Auth())->panels($panelMap) === [], 'login fora do mapa não tem painel algum');
+
+$_SESSION = [];
+check((new Auth())->canAccess('fmu', $panelMap) === false, 'sessão sem login não acessa painel');
+
 foreach ($tempFiles as $path) {
     @unlink($path);
 }

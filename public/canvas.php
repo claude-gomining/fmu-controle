@@ -12,6 +12,16 @@ if (!$auth->check()) {
     redirect_to('index.php');
 }
 
+// Controle de acesso por painel: só usuários com o painel 'afya' entram aqui.
+if (!$auth->canAccess('afya', $config['panels'])) {
+    if ($auth->canAccess('fmu', $config['panels'])) {
+        redirect_to('index.php');
+    }
+
+    $auth->logout();
+    redirect_to('index.php');
+}
+
 $canvasCollection = $config['canvas']['collection'];
 
 function canvas_repository(array $config): BlueprintRepository
@@ -169,7 +179,9 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
         </div>
     </div>
     <div class="cv-topbar-actions">
-        <a class="cv-link" href="index.php">Portal FMU</a>
+        <?php if ($auth->canAccess('fmu', $config['panels'])): ?>
+            <a class="cv-link" href="index.php">Portal FMU</a>
+        <?php endif; ?>
         <span class="cv-user"><?= e($auth->user()) ?></span>
         <form method="post" action="index.php" class="cv-inline-form">
             <input type="hidden" name="action" value="logout">

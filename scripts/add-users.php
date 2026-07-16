@@ -6,8 +6,8 @@ declare(strict_types=1);
  * Cadastra (ou atualiza) os usuários de acesso ao portal: FMU e Gomining.
  *
  * As senhas nunca ficam no código: informe-as de forma interativa quando o
- * script pedir, ou via variáveis de ambiente FMU_USER_PASSWORD e
- * GOMINING_USER_PASSWORD (útil para automação).
+ * script pedir, ou via variáveis de ambiente FMU_USER_PASSWORD,
+ * GOMINING_USER_PASSWORD e AFYA_USER_PASSWORD (útil para automação).
  *
  * Execução (Linux/macOS):
  *   php scripts/add-users.php
@@ -35,6 +35,11 @@ $usersToCreate = [
         'usuario' => 'gomining',
         'nome' => 'Gomining',
         'env' => 'GOMINING_USER_PASSWORD',
+    ],
+    [
+        'usuario' => 'afya',
+        'nome' => 'Afya',
+        'env' => 'AFYA_USER_PASSWORD',
     ],
 ];
 

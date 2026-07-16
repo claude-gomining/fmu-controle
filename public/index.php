@@ -4,6 +4,22 @@ declare(strict_types=1);
 
 [$config, $auth] = require __DIR__ . '/../src/bootstrap.php';
 
+/**
+ * URL do painel inicial do usuário conforme os painéis liberados.
+ */
+function landing_url(Auth $auth, array $config): string
+{
+    if ($auth->canAccess('fmu', $config['panels'])) {
+        return 'index.php';
+    }
+
+    if ($auth->canAccess('afya', $config['panels'])) {
+        return 'canvas.php';
+    }
+
+    return 'index.php';
+}
+
 $error = null;
 $repository = null;
 
@@ -64,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $userLimiter->clear($userKey);
                 $ipLimiter->clear($ipKey);
                 $auth->loginAs($verifiedUser['usuario'], $verifiedUser['nome']);
-                redirect_to('index.php');
+                redirect_to(landing_url($auth, $config));
             }
         } catch (Throwable $exception) {
             error_log('Falha ao validar login: ' . $exception->getMessage());
@@ -83,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_to('index.php');
     }
 
-    if ($action === 'update_status' && $auth->check()) {
+    if ($action === 'update_status' && $auth->check() && $auth->canAccess('fmu', $config['panels'])) {
         if (!$repository) {
             flash_set('error', 'Não foi possível conectar ao MongoDB.');
             redirect_to('index.php');
@@ -124,6 +140,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         redirect_to(current_url());
     }
+}
+
+// Controle de acesso por painel: usuários sem o painel da FMU são levados ao
+// seu painel (ou deslogados, se não tiverem nenhum). Feito após o tratamento de
+// login/logout para não interferir nessas ações.
+if ($auth->check() && !$auth->canAccess('fmu', $config['panels'])) {
+    if ($auth->canAccess('afya', $config['panels'])) {
+        redirect_to('canvas.php');
+    }
+
+    $auth->logout();
+    redirect_to('index.php');
 }
 
 $flash = flash_get();
@@ -199,7 +227,9 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
             </div>
             <nav aria-label="Navegação principal">
                 <a class="nav-link active" href="index.php">Disciplinas</a>
-                <a class="nav-link" href="canvas.php">Canvas</a>
+                <?php if ($auth->canAccess('afya', $config['panels'])): ?>
+                    <a class="nav-link" href="canvas.php">Canvas</a>
+                <?php endif; ?>
                 <?php if ($auth->isAdmin($config['admin']['users'])): ?>
                     <a class="nav-link" href="admin.php">Administração</a>
                 <?php endif; ?>

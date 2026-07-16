@@ -125,6 +125,23 @@ Campos usados para login:
 
 O campo `senha_hash` **deve** ser gerado com `password_hash`. Senhas em texto puro não são aceitas — documentos legados com os campos `senha`/`password` em texto puro precisam ser migrados para hash antes do login funcionar.
 
+## Acesso por painel (logins fixos)
+
+O portal tem dois painéis e três logins fixos, com acesso segregado:
+
+| Login      | Painel FMU (`index.php` / `admin.php`) | Painel Canvas/Afya (`canvas.php`) |
+|------------|:--------------------------------------:|:---------------------------------:|
+| `fmu`      | ✅                                     | ❌                                |
+| `afya`     | ❌                                     | ✅                                |
+| `gomining` | ✅                                     | ✅                                |
+
+- Ao entrar, o usuário é levado ao seu painel inicial (`fmu`/`gomining` → Disciplinas; `afya` → Canvas).
+- Quem tenta abrir um painel sem permissão é redirecionado para o painel a que tem acesso; o menu só mostra os painéis liberados.
+- `gomining` acessa os dois com o **mesmo login** e alterna pelos links de navegação (Disciplinas ↔ Canvas).
+- O upload de planilha (`admin.php`) continua restrito ao `gomining`.
+
+O mapeamento de painéis é fixo em `config/config.php` (chave `panels`). Os três usuários são criados por `scripts/add-users.php` (senhas por `FMU_USER_PASSWORD`, `GOMINING_USER_PASSWORD`, `AFYA_USER_PASSWORD`).
+
 ## Segurança
 
 - O login é limitado por tentativas: após 5 falhas para o mesmo usuário+IP (ou 30 falhas por IP) o acesso fica bloqueado por 15 minutos. Configurável via `LOGIN_MAX_ATTEMPTS`, `LOGIN_IP_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_SECONDS` e `LOGIN_THROTTLE_DIR` (diretório gravável onde o estado do bloqueio é salvo; padrão: diretório temporário do sistema).
