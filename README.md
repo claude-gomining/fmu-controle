@@ -56,7 +56,31 @@ Variáveis usadas **apenas** pelo `scripts/add-users.php` (criação de usuário
 
 ## Instalação e configuração em servidor Ubuntu
 
-Passo a passo para Ubuntu 22.04/24.04 com Nginx + PHP-FPM. Ajuste a versão do PHP (`8.3` nos exemplos) conforme a instalada.
+### Setup automático (recomendado)
+
+O script `scripts/setup-env.sh` faz o processo de ponta a ponta de forma interativa — pergunta cada informação, uma a uma:
+
+```bash
+cd /var/www/fmu-controle   # ou a pasta onde clonou o projeto
+bash scripts/setup-env.sh
+```
+
+Ele:
+
+1. **Instala as dependências** (PHP + extensões `mongodb`/`mbstring`/`curl` e o Nginx) via PPA `ondrej/php` — pergunta a versão do PHP (padrão 8.3);
+2. **Monta a `MONGODB_URI`** do seu servidor externo (você cola a URI pronta ou informa host, porta, usuário e senha — a senha é lida de forma oculta e URL-encoded automaticamente), ou aceita um Atlas `mongodb+srv`;
+3. Pergunta host/token do **Canvas** e as demais opções (com padrões sensatos);
+4. **Grava `/etc/fmu-portal.env`** com permissão `640` (dono `root:www-data`) e cria a pasta de throttle;
+5. **Testa a conexão** com o MongoDB (se a extensão estiver ativa);
+6. Opcionalmente **configura o PHP-FPM** (EnvironmentFile + `clear_env = no`) e reinicia o serviço.
+
+Ao final, ele mostra os próximos passos (criar os usuários e configurar o Nginx). Rode como `root` ou com `sudo` disponível para que ele possa instalar pacotes e gravar em `/etc`.
+
+> Segredos (senha do Mongo, token do Canvas) são lidos ocultos e nunca aparecem na tela nem no histórico do shell.
+
+### Passo a passo manual
+
+Caso prefira configurar manualmente, siga os passos abaixo (Ubuntu 22.04/24.04 com Nginx + PHP-FPM). Ajuste a versão do PHP (`8.3` nos exemplos) conforme a instalada.
 
 ### 1. Instalar PHP, a extensão mongodb e o Nginx
 
