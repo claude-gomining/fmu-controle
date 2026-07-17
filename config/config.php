@@ -13,6 +13,64 @@ function env_value(string $key, ?string $default = null): ?string
     return (string) $value;
 }
 
+/**
+ * Carrega variáveis de um arquivo de ambiente (formato KEY=VALUE), sem
+ * sobrescrever as que já estiverem definidas no ambiente. Assim a aplicação
+ * funciona sob mod_php/Apache (site padrão) sem precisar configurar o serviço:
+ * basta o arquivo /etc/fmu-portal.env existir. O caminho pode ser trocado por
+ * FMU_ENV_FILE. É seguro (não executa nada; só faz parse simples).
+ */
+(static function (): void {
+    $file = getenv('FMU_ENV_FILE');
+
+    if ($file === false || $file === '') {
+        $file = '/etc/fmu-portal.env';
+    }
+
+    if (!is_readable($file)) {
+        return;
+    }
+
+    $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+
+    foreach ($lines as $line) {
+        $line = ltrim($line);
+
+        if ($line === '' || $line[0] === '#') {
+            continue;
+        }
+
+        $pos = strpos($line, '=');
+
+        if ($pos === false) {
+            continue;
+        }
+
+        $key = trim(substr($line, 0, $pos));
+
+        if (!preg_match('/^[A-Z_][A-Z0-9_]*$/', $key)) {
+            continue;
+        }
+
+        if (getenv($key) !== false || isset($_ENV[$key]) || isset($_SERVER[$key])) {
+            continue; // já definida: não sobrescreve
+        }
+
+        $value = trim(substr($line, $pos + 1));
+
+        if (strlen($value) >= 2) {
+            $quote = $value[0];
+
+            if (($quote === '"' || $quote === "'") && substr($value, -1) === $quote) {
+                $value = substr($value, 1, -1);
+            }
+        }
+
+        putenv($key . '=' . $value);
+        $_ENV[$key] = $value;
+    }
+})();
+
 return [
     'app_name' => 'FMU - Correção Automática',
     'timezone' => env_value('APP_TIMEZONE', 'America/Sao_Paulo'),

@@ -56,49 +56,41 @@ Variáveis usadas **apenas** pelo `scripts/add-users.php` (criação de usuário
 
 ## Instalação e configuração em servidor Ubuntu
 
-### Setup automático (recomendado)
+### Deploy automático com Apache (recomendado)
 
-O script `scripts/setup-env.sh` faz o processo de ponta a ponta de forma interativa — pergunta cada informação, uma a uma:
+O script `scripts/deploy.sh` faz todo o deploy num servidor Ubuntu novo, de forma interativa:
 
 ```bash
-cd /var/www/fmu-controle   # ou a pasta onde clonou o projeto
-bash scripts/setup-env.sh
+cd /caminho/onde/clonou/o-projeto
+sudo bash scripts/deploy.sh
 ```
 
 Ele:
 
-1. **Instala as dependências** (PHP + extensões `mongodb`/`mbstring`/`curl` e o Nginx) via PPA `ondrej/php` — pergunta a versão do PHP (padrão 8.3);
-2. **Monta a `MONGODB_URI`** do seu servidor externo (você cola a URI pronta ou informa host, porta, usuário e senha — a senha é lida de forma oculta e URL-encoded automaticamente), ou aceita um Atlas `mongodb+srv`;
-3. Pergunta host/token do **Canvas** e as demais opções (com padrões sensatos);
-4. **Grava `/etc/fmu-portal.env`** com permissão `640` (dono `root:www-data`) e cria a pasta de throttle;
-5. **Testa a conexão** com o MongoDB (se a extensão estiver ativa);
-6. Opcionalmente **configura o PHP-FPM** (EnvironmentFile + `clear_env = no`) e reinicia o serviço.
+1. **Pergunta os dados de configuração** (MongoDB URI, banco, host/token do Canvas, fuso horário). Segredos são lidos ocultos. **Não pede usuários nem senhas de login** — os usuários já existem no MongoDB.
+2. **Instala só o que faltar**: Apache, PHP (mod_php) e as extensões `mongodb`/`mbstring`/`curl`, via PPA `ondrej/php`.
+3. **Publica apenas os arquivos que o usuário acessa** (o conteúdo de `public/`) em **`/var/www/html`**, e o **backend (`src/`, `config/`) em `/var/www`**, fora do diretório servido.
+4. **Grava as variáveis em `/etc/fmu-portal.env`** (permissão `640`, `root:www-data`) — lidas pelo próprio app; e cria a pasta de throttle.
+5. Deixa o **código como somente-leitura** para o usuário do servidor web.
 
-Ao final, ele mostra os próximos passos (criar os usuários e configurar o Nginx). Rode como `root` ou com `sudo` disponível para que ele possa instalar pacotes e gravar em `/etc`.
+Características importantes:
 
-> Segredos (senha do Mongo, token do Canvas) são lidos ocultos e nunca aparecem na tela nem no histórico do shell.
+- Roda no **Apache usando o site padrão** (`/var/www/html`) com **mod_php** — **não cria virtual host, não mexe em portas nem em serviços**, e **não configura SSL**.
+- As variáveis chegam ao app porque o `config/config.php` **carrega o `/etc/fmu-portal.env` sozinho** (funciona sob mod_php sem qualquer configuração de servidor). O caminho pode ser trocado por `FMU_ENV_FILE`.
+- Estrutura publicada:
 
-### Deploy com Apache em /var/www/html (script)
+  ```
+  /var/www/html/     ← DocumentRoot: index.php, admin.php, canvas.php, assets/  (o que o usuário vê)
+  /var/www/src/      ← backend (NÃO servido)
+  /var/www/config/   ← configuração (NÃO servido)
+  /etc/fmu-portal.env← variáveis/segredos (640 root:www-data)
+  ```
 
-Se você já rodou o `setup-env.sh` (variáveis e usuários prontos) e quer publicar com **Apache** servindo a partir de `/var/www/html`, use:
-
-```bash
-sudo bash scripts/deploy-apache.sh
-```
-
-O `deploy-apache.sh`:
-
-- **Valida** o que já existe e instala só o que faltar (Apache, PHP, extensões `mongodb`/`mbstring`/`curl`);
-- Publica o projeto em **`/var/www/html/fmu-controle`** (não sobrescreve se já existir) e serve a subpasta `public/` — mantendo `src/`, `config/` e `.git` fora da web;
-- **Reaproveita** o `/etc/fmu-portal.env`; se ele não existir, gera a partir das variáveis já presentes no ambiente;
-- Configura o Apache (PHP-FPM via `mod_proxy_fcgi`), desativa o site `000-default` e recarrega;
-- **Não** cria usuários e **não** configura SSL.
-
-Ajuste o `ServerName` exportando `APP_SERVER_NAME` antes de rodar (padrão: hostname da máquina). Para outro caminho, passe como argumento: `sudo bash scripts/deploy-apache.sh /var/www/html/outro-nome`.
+> Para servir por HTTPS (recomendado em produção, para o cookie de sessão receber a flag `Secure`), configure o TLS à parte — o script deliberadamente não mexe nisso.
 
 ### Passo a passo manual
 
-Caso prefira configurar manualmente, siga os passos abaixo (Ubuntu 22.04/24.04 com Nginx + PHP-FPM). Ajuste a versão do PHP (`8.3` nos exemplos) conforme a instalada.
+Caso prefira configurar manualmente com **Nginx + PHP-FPM**, siga os passos abaixo (Ubuntu 22.04/24.04). Ajuste a versão do PHP (`8.3` nos exemplos) conforme a instalada. Neste modo, o projeto pode ficar em `/var/www/fmu-controle` com o DocumentRoot em `public/`.
 
 ### 1. Instalar PHP, a extensão mongodb e o Nginx
 
