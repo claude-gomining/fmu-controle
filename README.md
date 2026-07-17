@@ -78,6 +78,24 @@ Ao final, ele mostra os próximos passos (criar os usuários e configurar o Ngin
 
 > Segredos (senha do Mongo, token do Canvas) são lidos ocultos e nunca aparecem na tela nem no histórico do shell.
 
+### Deploy com Apache em /var/www/html (script)
+
+Se você já rodou o `setup-env.sh` (variáveis e usuários prontos) e quer publicar com **Apache** servindo a partir de `/var/www/html`, use:
+
+```bash
+sudo bash scripts/deploy-apache.sh
+```
+
+O `deploy-apache.sh`:
+
+- **Valida** o que já existe e instala só o que faltar (Apache, PHP, extensões `mongodb`/`mbstring`/`curl`);
+- Publica o projeto em **`/var/www/html/fmu-controle`** (não sobrescreve se já existir) e serve a subpasta `public/` — mantendo `src/`, `config/` e `.git` fora da web;
+- **Reaproveita** o `/etc/fmu-portal.env`; se ele não existir, gera a partir das variáveis já presentes no ambiente;
+- Configura o Apache (PHP-FPM via `mod_proxy_fcgi`), desativa o site `000-default` e recarrega;
+- **Não** cria usuários e **não** configura SSL.
+
+Ajuste o `ServerName` exportando `APP_SERVER_NAME` antes de rodar (padrão: hostname da máquina). Para outro caminho, passe como argumento: `sudo bash scripts/deploy-apache.sh /var/www/html/outro-nome`.
+
 ### Passo a passo manual
 
 Caso prefira configurar manualmente, siga os passos abaixo (Ubuntu 22.04/24.04 com Nginx + PHP-FPM). Ajuste a versão do PHP (`8.3` nos exemplos) conforme a instalada.
