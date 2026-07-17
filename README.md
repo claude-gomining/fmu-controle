@@ -4,22 +4,194 @@ Portal em PHP para ativar ou desativar disciplinas de correção automática arm
 
 ## Requisitos
 
-- PHP 8.1+
-- Extensão PHP `mongodb` habilitada
-- MongoDB acessível pela aplicação
+- PHP 8.1+ (CLI e, em produção, PHP-FPM)
+- Extensões PHP: `mongodb` (obrigatória), `mbstring` (obrigatória), `openssl` (para HTTPS ao Canvas; já vem por padrão), `curl` (opcional)
+- `allow_url_fopen` habilitado (padrão do PHP) — usado para chamar o Canvas e o serviço LTI
+- MongoDB acessível pela aplicação (Atlas ou self-hosted)
 
-## Configuração
+## O que você precisa fornecer
 
-A aplicação lê as configurações por variáveis de ambiente:
+Para colocar o portal no ar, tenha em mãos os seguintes valores (os demais têm padrão e são opcionais):
 
-```powershell
-$env:MONGODB_URI="mongodb+srv://USUARIO:SENHA@HOST.mongodb.net/?appName=Atividades"
-$env:MONGODB_DATABASE="activity"
-$env:MONGODB_ACTIVITY_COLLECTION="fmu_activity_control"
-$env:MONGODB_USER_COLLECTION="fmu_user_control"
+| Valor | Variável | Para quê |
+|-------|----------|----------|
+| String de conexão do MongoDB | `MONGODB_URI` | Onde os dados são gravados/lidos |
+| Host do Canvas do cliente | `CANVAS_BASE_URL` | Ex.: `https://afya.instructure.com` |
+| Token de acesso do Canvas (segredo) | `CANVAS_API_TOKEN` | Autoriza a busca dos cursos da blueprint |
+| Senhas dos 3 usuários | `FMU_USER_PASSWORD`, `GOMINING_USER_PASSWORD`, `AFYA_USER_PASSWORD` | Usadas **uma vez** pelo `scripts/add-users.php` para criar os logins |
+
+> **Segredos** (`MONGODB_URI` com senha, `CANVAS_API_TOKEN`, senhas dos usuários) nunca devem ser commitados. Coloque-os em um arquivo de ambiente com permissão restrita (ver seção Ubuntu).
+
+## Variáveis de ambiente (referência completa)
+
+Todas as configurações são lidas de variáveis de ambiente. As que têm padrão podem ser omitidas.
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `MONGODB_URI` | `mongodb://127.0.0.1:27017` | Conexão do MongoDB. **Defina em produção.** |
+| `MONGODB_DATABASE` | `activity` | Banco de dados usado. |
+| `MONGODB_ACTIVITY_COLLECTION` | `fmu_activity_control` | Collection das disciplinas (painel FMU). |
+| `MONGODB_USER_COLLECTION` | `fmu_user_control` | Collection dos usuários/login. |
+| `MONGODB_CANVAS_COLLECTION` | `canvas_blueprints` | Collection das blueprints/cursos (painel Canvas). |
+| `CANVAS_BASE_URL` | `https://afya.test.instructure.com` | Host do Canvas. **Ajuste para o host real do cliente.** |
+| `CANVAS_API_TOKEN` | *(vazio)* | Token de acesso do Canvas (segredo). **Obrigatório para o painel Canvas.** |
+| `CANVAS_TIMEOUT_SECONDS` | `20` | Timeout de cada chamada ao Canvas. |
+| `CANVAS_PER_PAGE` | `100` | Itens por página na API do Canvas (máx. 100). |
+| `CANVAS_MAX_PAGES` | `200` | Limite de páginas seguidas por blueprint (proteção). |
+| `CANVAS_PAGE_SIZE` | `10` | Blueprints por página na tela. |
+| `ADMIN_USERS` | `gomining` | Logins com acesso ao upload de planilha (lista separada por vírgula). |
+| `UPLOAD_MAX_BYTES` | `5242880` (5 MB) | Tamanho máximo do CSV de importação. |
+| `UPLOAD_MAX_ROWS` | `10000` | Máximo de linhas do CSV de importação. |
+| `LTI_CONTROL_BASE_URL` | `http://prd-lti-activity-control.eba-ikyyadp3.us-east-2.elasticbeanstalk.com` | Serviço LTI notificado ao ativar/desativar disciplinas (painel FMU). |
+| `LTI_CONTROL_INSTITUTION` | `fmu` | Valor do campo `institution` no payload LTI. |
+| `LTI_CONTROL_TIMEOUT_SECONDS` | `5` | Timeout da chamada ao serviço LTI. |
+| `LOGIN_MAX_ATTEMPTS` | `5` | Tentativas de login por usuário+IP antes do bloqueio. |
+| `LOGIN_IP_MAX_ATTEMPTS` | `30` | Tentativas de login por IP antes do bloqueio. |
+| `LOGIN_LOCKOUT_SECONDS` | `900` (15 min) | Duração do bloqueio de login. |
+| `LOGIN_THROTTLE_DIR` | diretório temporário do sistema | Pasta gravável onde o estado do bloqueio é salvo. |
+| `APP_TIMEZONE` | `America/Sao_Paulo` | Fuso horário da aplicação. |
+| `APP_SESSION_NAME` | `fmu_auto_grading_portal` | Nome do cookie de sessão. |
+
+Variáveis usadas **apenas** pelo `scripts/add-users.php` (criação de usuários): `FMU_USER_PASSWORD`, `GOMINING_USER_PASSWORD`, `AFYA_USER_PASSWORD`.
+
+## Instalação e configuração em servidor Ubuntu
+
+Passo a passo para Ubuntu 22.04/24.04 com Nginx + PHP-FPM. Ajuste a versão do PHP (`8.3` nos exemplos) conforme a instalada.
+
+### 1. Instalar PHP, a extensão mongodb e o Nginx
+
+```bash
+# PPA ondrej: versões atuais do PHP e o pacote php-mongodb prontos
+sudo add-apt-repository -y ppa:ondrej/php
+sudo apt update
+sudo apt install -y php8.3-cli php8.3-fpm php8.3-mbstring php8.3-curl php8.3-mongodb nginx
+
+# Conferir que a extensão mongodb está ativa
+php -m | grep -i mongodb
 ```
 
-Use a URI real apenas no ambiente local/servidor. Não grave credenciais reais no código ou no README.
+### 2. Publicar o código
+
+```bash
+sudo mkdir -p /var/www/fmu-controle
+sudo chown -R "$USER":www-data /var/www/fmu-controle
+git clone <URL_DO_REPOSITORIO> /var/www/fmu-controle
+# a raiz pública é a pasta public/
+```
+
+### 3. Criar o arquivo de variáveis de ambiente (com segredos)
+
+Crie `/etc/fmu-portal.env` com os valores reais. Preencha ao menos os obrigatórios:
+
+```bash
+sudo tee /etc/fmu-portal.env >/dev/null <<'EOF'
+MONGODB_URI=mongodb+srv://USUARIO:SENHA@HOST.mongodb.net/?appName=Atividades
+MONGODB_DATABASE=activity
+CANVAS_BASE_URL=https://afya.instructure.com
+CANVAS_API_TOKEN=COLE_AQUI_O_TOKEN_DO_CANVAS
+APP_TIMEZONE=America/Sao_Paulo
+LOGIN_THROTTLE_DIR=/var/lib/fmu-portal/throttle
+EOF
+
+# Permissão restrita: só o usuário do PHP lê o arquivo de segredos
+sudo chown root:www-data /etc/fmu-portal.env
+sudo chmod 640 /etc/fmu-portal.env
+
+# Pasta gravável para o controle de tentativas de login
+sudo mkdir -p /var/lib/fmu-portal/throttle
+sudo chown -R www-data:www-data /var/lib/fmu-portal
+```
+
+### 4. Fazer o PHP-FPM carregar essas variáveis
+
+```bash
+# Carrega o arquivo de ambiente no serviço do PHP-FPM
+sudo systemctl edit php8.3-fpm
+```
+
+No editor que abrir, insira:
+
+```ini
+[Service]
+EnvironmentFile=/etc/fmu-portal.env
+```
+
+Garanta que o pool repassa o ambiente aos scripts — em `/etc/php/8.3/fpm/pool.d/www.conf` a linha deve ser:
+
+```ini
+clear_env = no
+```
+
+Depois recarregue:
+
+```bash
+sudo systemctl restart php8.3-fpm
+```
+
+### 5. Configurar o Nginx
+
+```bash
+sudo tee /etc/nginx/sites-available/fmu-portal >/dev/null <<'EOF'
+server {
+    listen 80;
+    server_name portal.exemplo.com;
+    root /var/www/fmu-controle/public;
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    }
+
+    # Não expõe arquivos ocultos
+    location ~ /\.(?!well-known) { deny all; }
+}
+EOF
+
+sudo ln -s /etc/nginx/sites-available/fmu-portal /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Para HTTPS (recomendado — o cookie de sessão só recebe a flag `Secure` sob HTTPS):
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d portal.exemplo.com
+```
+
+### 6. Criar os três usuários (fmu, gomining, afya)
+
+As senhas nunca ficam no código; passe-as por variável de ambiente só nesta execução:
+
+```bash
+cd /var/www/fmu-controle
+sudo -u www-data \
+  FMU_USER_PASSWORD='senha-fmu' \
+  GOMINING_USER_PASSWORD='senha-gomining' \
+  AFYA_USER_PASSWORD='senha-afya' \
+  MONGODB_URI='mongodb+srv://USUARIO:SENHA@HOST.mongodb.net/?appName=Atividades' \
+  php scripts/add-users.php
+```
+
+> Prefira senhas fortes (mínimo 8 caracteres). O script grava apenas o hash (`password_hash`) e marca `ativo: true`. Rode novamente a qualquer momento para redefinir senhas.
+
+Pronto — acesse `https://portal.exemplo.com`. Cada login cai no seu painel (ver "Acesso por painel").
+
+### Testar sem servidor web (validação rápida)
+
+Para um teste pontual com o servidor embutido do PHP, exporte as variáveis e rode:
+
+```bash
+cd /var/www/fmu-controle
+set -a; source /etc/fmu-portal.env; set +a
+php -S 0.0.0.0:8000 -t public
+```
+
+Depois acesse `http://SERVIDOR:8000`.
 
 ## Página de administração (upload de planilha)
 
@@ -149,28 +321,27 @@ O mapeamento de painéis é fixo em `config/config.php` (chave `panels`). Os tr�
 - As respostas incluem `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options` e `Referrer-Policy`. Detalhes de erros internos são gravados no log do servidor (`error_log`) e nunca exibidos ao usuário.
 - Não use o usuário de teste `admin/admin123` em produção — ele existe apenas para a massa de teste local.
 
-## Cadastro dos usuários de acesso (FMU e Gomining)
+## Cadastro dos usuários de acesso (fmu, gomining e afya)
 
-Para criar (ou atualizar) os usuários oficiais do portal, rode:
-
-```powershell
-php -d extension=.\vendor\php-ext\mongodb\php_mongodb.dll scripts\add-users.php
-```
-
-No Linux/macOS (com a extensão `mongodb` habilitada):
+Para criar (ou atualizar) os três usuários oficiais do portal, rode no servidor (Linux, com a extensão `mongodb` habilitada):
 
 ```bash
 php scripts/add-users.php
 ```
 
-O script cria os usuários `fmu` e `gomining` na collection `fmu_user_control`, pedindo a senha de cada um de forma interativa (mínimo 8 caracteres, com confirmação). A senha é gravada apenas como hash (`password_hash`) e o campo `ativo` é definido como `true`. Se o usuário já existir, a senha e os dados são atualizados — o script também serve para redefinir senhas.
+No Windows (com a DLL do repositório):
+
+```powershell
+php -d extension=.\vendor\php-ext\mongodb\php_mongodb.dll scripts\add-users.php
+```
+
+O script cria os usuários `fmu`, `gomining` e `afya` na collection `fmu_user_control`, pedindo a senha de cada um de forma interativa (mínimo 8 caracteres, com confirmação). A senha é gravada apenas como hash (`password_hash`) e o campo `ativo` é definido como `true`. Se o usuário já existir, a senha e os dados são atualizados — o script também serve para redefinir senhas.
 
 Para uso não interativo (automação), defina as senhas por variáveis de ambiente antes de rodar:
 
-```powershell
-$env:FMU_USER_PASSWORD="..."
-$env:GOMINING_USER_PASSWORD="..."
-php -d extension=.\vendor\php-ext\mongodb\php_mongodb.dll scripts\add-users.php
+```bash
+FMU_USER_PASSWORD='...' GOMINING_USER_PASSWORD='...' AFYA_USER_PASSWORD='...' \
+  php scripts/add-users.php
 ```
 
 ## Cadastro manual de usuários direto no MongoDB
