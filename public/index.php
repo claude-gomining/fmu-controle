@@ -182,7 +182,7 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($config['app_name']) ?></title>
+    <title><?= e($auth->check() ? $config['app_name'] : 'Acesso ao portal') ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -193,12 +193,12 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
     <main class="login-shell">
         <section class="login-panel" aria-labelledby="login-title">
             <div class="brand-mark">
-                <span>FMU</span>
+                <span>Portal</span>
                 <small>Gomining</small>
             </div>
             <p class="eyebrow">Correção automática</p>
             <h1 id="login-title">Acesso ao portal</h1>
-            <p class="login-copy">Entre com as credenciais enviadas para administrar as disciplinas.</p>
+            <p class="login-copy">Entre com suas credenciais para acessar o portal.</p>
 
             <?php if ($flash): ?>
                 <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
@@ -228,7 +228,7 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
             <nav aria-label="Navegação principal">
                 <a class="nav-link active" href="index.php">Disciplinas</a>
                 <?php if ($auth->canAccess('afya', $config['panels'])): ?>
-                    <a class="nav-link" href="canvas.php">Canvas</a>
+                    <a class="nav-link" href="canvas.php">AFYA</a>
                 <?php endif; ?>
                 <?php if ($auth->isAdmin($config['admin']['users'])): ?>
                     <a class="nav-link" href="admin.php">Administração</a>

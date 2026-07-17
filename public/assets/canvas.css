@@ -4,8 +4,8 @@
     --cv-border: #dce3ec;
     --cv-text: #1f2933;
     --cv-muted: #6b7684;
-    --cv-primary: #0a7d68;
-    --cv-primary-strong: #075f50;
+    --cv-primary: #e4002b;
+    --cv-primary-strong: #b30021;
     --cv-danger: #b4453b;
     --cv-shadow: 0 10px 30px rgba(15, 34, 58, 0.08);
     --cv-radius: 14px;
@@ -117,8 +117,8 @@ body.cv-body {
 .cv-btn-sm { height: 36px; padding: 0 14px; font-size: 13px; }
 .cv-btn-primary { background: var(--cv-primary); color: #fff; }
 .cv-btn-primary:hover { background: var(--cv-primary-strong); }
-.cv-btn-secondary { background: #eef6f4; color: var(--cv-primary-strong); border-color: #cfe6e0; }
-.cv-btn-secondary:hover { background: #e0efeb; }
+.cv-btn-secondary { background: #fdecef; color: var(--cv-primary-strong); border-color: #f6ccd4; }
+.cv-btn-secondary:hover { background: #fbdae1; }
 .cv-btn-outline { background: #fff; color: var(--cv-danger); border-color: #e6cbc8; }
 .cv-btn-outline:hover { background: #fbf1f0; }
 .cv-btn-ghost { background: transparent; color: var(--cv-muted); border-color: var(--cv-border); }
@@ -161,7 +161,7 @@ body.cv-body {
     text-transform: uppercase;
     letter-spacing: .06em;
     color: var(--cv-primary-strong);
-    background: #e2f1ed;
+    background: #fdecef;
     padding: 3px 8px;
     border-radius: 999px;
     font-weight: 700;

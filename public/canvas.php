@@ -155,7 +155,7 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Canvas · Controle de cursos</title>
+    <title>AFYA · Controle de cursos</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -166,15 +166,15 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
     <div class="cv-overlay-card">
         <div class="cv-spinner" aria-hidden="true"></div>
         <p class="cv-overlay-title">Aguarde…</p>
-        <p class="cv-overlay-sub">Buscando os cursos no Canvas e gravando os dados. Isso pode levar alguns instantes.</p>
+        <p class="cv-overlay-sub">Buscando os cursos e gravando os dados. Isso pode levar alguns instantes.</p>
     </div>
 </div>
 
 <header class="cv-topbar">
     <div class="cv-brand">
-        <span class="cv-brand-mark">C</span>
+        <span class="cv-brand-mark">A</span>
         <div>
-            <strong>Canvas · Controle de cursos</strong>
+            <strong>AFYA · Controle de cursos</strong>
             <small>Correção por blueprint</small>
         </div>
     </div>
