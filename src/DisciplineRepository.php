@@ -99,6 +99,48 @@ final class DisciplineRepository
         return array_values(array_unique($codes));
     }
 
+    /**
+     * Dentre os códigos informados, retorna os que JÁ existem na collection
+     * (considerando também os nomes de campo legados).
+     *
+     * @param list<string> $codes
+     * @return list<string>
+     */
+    public function existingCodes(array $codes): array
+    {
+        $codes = array_values(array_unique(array_filter(
+            array_map(static fn ($code): string => trim((string) $code), $codes),
+            static fn (string $code): bool => $code !== ''
+        )));
+
+        if ($codes === []) {
+            return [];
+        }
+
+        $query = new MongoDB\Driver\Query([
+            '$or' => [
+                ['codigo_disciplina' => ['$in' => $codes]],
+                ['Codigo da Disciplina' => ['$in' => $codes]],
+                ['Código da Disciplina' => ['$in' => $codes]],
+            ],
+        ], [
+            'projection' => ['codigo_disciplina' => 1, 'Codigo da Disciplina' => 1, 'Código da Disciplina' => 1],
+        ]);
+
+        $cursor = $this->connection->manager()->executeQuery($this->connection->namespace(), $query);
+        $found = [];
+
+        foreach ($cursor as $document) {
+            $code = $this->firstValue($document, ['codigo_disciplina', 'Codigo da Disciplina', 'Código da Disciplina']);
+
+            if ($code !== '') {
+                $found[$code] = true;
+            }
+        }
+
+        return array_keys($found);
+    }
+
     private function toObjectIds(array $ids): array
     {
         $objectIds = [];

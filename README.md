@@ -252,6 +252,17 @@ Cada linha corresponde a uma disciplina. Regras de importação:
 
 Limites configuráveis: `UPLOAD_MAX_BYTES` (padrão 5 MB) e `UPLOAD_MAX_ROWS` (padrão 10000).
 
+### Pré-visualização antes de importar
+
+O envio **não grava nada de imediato**: primeiro é exibida uma pré-visualização (o sistema consulta o banco para saber o que é novo). Nela aparecem:
+
+- **linhas com dados novos** (serão adicionadas);
+- **IDs já cadastrados** no banco (não serão adicionados);
+- **IDs repetidos no próprio arquivo** e **linhas sem CRT** (ignorados);
+- uma **amostra do mapeamento** coluna → campo (CRT→`codigo_disciplina`, DISCIPLINA→`nome_disciplina`, BLOCO→`bloco`, ANO→`ano`), para conferir se alguém não inverteu, por exemplo, `BLOCO` e `ANO`.
+
+Só depois de clicar em **Confirmar** é que as novas disciplinas são gravadas (e registradas/ativadas no serviço LTI). O botão **Cancelar** descarta a pré-visualização. A pré-visualização fica na sessão e expira em 15 minutos.
+
 ## Página Canvas (controle de cursos por blueprint)
 
 A página `canvas.php` é uma segunda interface (layout próprio) para clientes que usam o Canvas. A partir do código de uma **blueprint** (ID do curso da blueprint no Canvas), o portal busca todos os cursos associados e os cadastra para controle de correção.
