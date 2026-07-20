@@ -215,9 +215,12 @@ if command -v curl >/dev/null 2>&1; then
     esac
 fi
 say ""
-info "=== Deploy concluído (sem SSL, conforme solicitado) ==="
+info "=== Deploy concluído ==="
 say "Frontend:  $WEBROOT   (apenas os arquivos que o usuário acessa)"
 say "Backend:   $APP_DIR/src e $APP_DIR/config   (fora da web)"
 say "Variáveis: $ENV_FILE"
 say "Usuários:  já existentes no MongoDB (este script não os altera)."
 say "Acesse:    http://IP-OU-DNS-DO-SERVIDOR/"
+say ""
+say "Para habilitar HTTPS (Let's Encrypt) num domínio já apontado:"
+say "  sudo bash scripts/setup-ssl.sh SEU.DOMINIO.com"

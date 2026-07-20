@@ -86,7 +86,15 @@ Características importantes:
   /etc/fmu-portal.env← variáveis/segredos (640 root:www-data)
   ```
 
-> Para servir por HTTPS (recomendado em produção, para o cookie de sessão receber a flag `Secure`), configure o TLS à parte — o script deliberadamente não mexe nisso.
+### Habilitar HTTPS (Let's Encrypt)
+
+O `deploy.sh` não mexe em SSL. Para servir por HTTPS num domínio já apontado (DNS/Route53) para o servidor, rode depois:
+
+```bash
+sudo bash scripts/setup-ssl.sh controle.gomining-lti.com
+```
+
+O `setup-ssl.sh` instala o `certbot` (plugin do Apache), cria o virtual host do domínio apontando para o mesmo `/var/www/html`, obtém/instala o certificado do Let's Encrypt e ativa o **redirecionamento HTTP→HTTPS**. Pré-requisitos: o domínio já resolvendo para o IP do servidor e as **portas 80 e 443 abertas** no Security Group / Lightsail. A partir daí, o cookie de sessão recebe a flag `Secure` e o HSTS é enviado automaticamente (a aplicação detecta o HTTPS sozinha — nada a mudar no código).
 
 ### Passo a passo manual
 
