@@ -123,6 +123,7 @@ return [
             'http://prd-lti-activity-control.eba-ikyyadp3.us-east-2.elasticbeanstalk.com'
         ),
         'institution' => env_value('LTI_CONTROL_INSTITUTION', 'fmu'),
+        'institution_afya' => env_value('LTI_CONTROL_INSTITUTION_AFYA', 'afya'),
         'timeout_seconds' => max(1, (int) env_value('LTI_CONTROL_TIMEOUT_SECONDS', '5')),
     ],
 

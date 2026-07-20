@@ -56,8 +56,23 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $importer = new ActivityImporter($config['upload']['max_rows']);
 
             $parsed = $importer->parseCsv((string) $file['tmp_name']);
-            $inserted = $repository->insertNewActivities($parsed['activities']);
+            $newCodes = $repository->insertNewActivities($parsed['activities']);
+            $inserted = count($newCodes);
             $existing = count($parsed['activities']) - $inserted;
+
+            // Atividades novas: primeiro criar no serviço LTI, depois ativar.
+            $notified = true;
+
+            if ($newCodes !== []) {
+                $notifier = new ActivityControlNotifier(
+                    $config['lti_control']['base_url'],
+                    $config['lti_control']['institution'],
+                    $config['lti_control']['timeout_seconds']
+                );
+                $created = $notifier->notifyCreated($newCodes);
+                $enabled = $notifier->notifyEnabled($newCodes);
+                $notified = $created && $enabled;
+            }
 
             $message = sprintf('%d disciplina(s) adicionada(s); %d já cadastrada(s).', $inserted, $existing);
 
@@ -69,7 +84,12 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message .= sprintf(' %d CRT(s) repetido(s) no arquivo.', $parsed['duplicates']);
             }
 
-            flash_set('success', $message);
+            if (!$notified) {
+                $message .= ' Atenção: não foi possível registrar/ativar todas no serviço de correção automática.';
+                flash_set('error', $message);
+            } else {
+                flash_set('success', $message);
+            }
         } catch (ImportException $exception) {
             flash_set('error', $exception->getMessage());
         } catch (Throwable $exception) {

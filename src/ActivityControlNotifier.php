@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 /**
- * Notifica o serviço LTI de controle de atividades quando disciplinas são
- * ativadas ou desativadas no portal.
+ * Notifica o serviço LTI de controle de atividades.
  *
- * Envia PUT para {base_url}/v1/control/enable/list ou /v1/control/disable/list
- * com o payload {"activityId": "codigo1,codigo2,...", "institution": "..."}.
+ * - Criar:    POST {base_url}/v1/control/list          (registra a atividade)
+ * - Ativar:   PUT  {base_url}/v1/control/enable/list
+ * - Desativar:PUT  {base_url}/v1/control/disable/list
+ *
+ * Em todos, o payload é {"activityId": "id1,id2,...", "institution": "..."}.
+ * Ao criar/importar uma atividade, chame notifyCreated ANTES de notifyEnabled.
  */
 final class ActivityControlNotifier
 {
@@ -18,17 +21,22 @@ final class ActivityControlNotifier
     ) {
     }
 
+    public function notifyCreated(array $codes): bool
+    {
+        return $this->request('POST', '/v1/control/list', $codes);
+    }
+
     public function notifyEnabled(array $codes): bool
     {
-        return $this->send('enable', $codes);
+        return $this->request('PUT', '/v1/control/enable/list', $codes);
     }
 
     public function notifyDisabled(array $codes): bool
     {
-        return $this->send('disable', $codes);
+        return $this->request('PUT', '/v1/control/disable/list', $codes);
     }
 
-    private function send(string $action, array $codes): bool
+    private function request(string $method, string $path, array $codes): bool
     {
         $codes = $this->sanitizeCodes($codes);
 
@@ -36,7 +44,7 @@ final class ActivityControlNotifier
             return true;
         }
 
-        $url = rtrim($this->baseUrl, '/') . '/v1/control/' . $action . '/list';
+        $url = rtrim($this->baseUrl, '/') . $path;
         $payload = json_encode([
             'activityId' => implode(',', $codes),
             'institution' => $this->institution,
@@ -44,7 +52,7 @@ final class ActivityControlNotifier
 
         $context = stream_context_create([
             'http' => [
-                'method' => 'PUT',
+                'method' => $method,
                 'header' => "Content-Type: application/json\r\nAccept: application/json\r\n",
                 'content' => $payload,
                 'timeout' => $this->timeoutSeconds,
@@ -55,7 +63,7 @@ final class ActivityControlNotifier
         $body = @file_get_contents($url, false, $context);
 
         if ($body === false) {
-            error_log("Falha ao notificar o serviço LTI ({$action}): sem resposta de {$url}");
+            error_log("Falha ao notificar o serviço LTI ({$method} {$path}): sem resposta de {$url}");
 
             return false;
         }
@@ -63,7 +71,7 @@ final class ActivityControlNotifier
         $status = $this->responseStatus($http_response_header ?? []);
 
         if ($status < 200 || $status >= 300) {
-            error_log("Falha ao notificar o serviço LTI ({$action}): HTTP {$status} de {$url}");
+            error_log("Falha ao notificar o serviço LTI ({$method} {$path}): HTTP {$status} de {$url}");
 
             return false;
         }

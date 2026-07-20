@@ -73,11 +73,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $courses = canvas_client($config)->fetchAssociatedCourses($blueprintId);
             $result = $repository->saveBlueprintCourses($blueprintId, $config['canvas']['base_url'], $courses);
 
+            // Cursos novos: primeiro criar no serviço LTI, depois ativar (institution afya).
+            $notified = true;
+
+            if ($result['added_ids'] !== []) {
+                $notifier = new ActivityControlNotifier(
+                    $config['lti_control']['base_url'],
+                    $config['lti_control']['institution_afya'],
+                    $config['lti_control']['timeout_seconds']
+                );
+                $created = $notifier->notifyCreated($result['added_ids']);
+                $enabled = $notifier->notifyEnabled($result['added_ids']);
+                $notified = $created && $enabled;
+            }
+
             $message = $action === 'register_blueprint'
                 ? sprintf('Blueprint %s cadastrada: %d curso(s) coletado(s).', $blueprintId, $result['total'])
                 : sprintf('Blueprint %s atualizada: %d curso(s) novo(s), %d no total.', $blueprintId, $result['added'], $result['total']);
 
-            flash_set('success', $message);
+            if ($notified) {
+                flash_set('success', $message);
+            } else {
+                flash_set('error', $message . ' Atenção: não foi possível registrar/ativar os novos cursos no serviço de correção automática.');
+            }
         } catch (CanvasException $exception) {
             flash_set('error', $exception->getMessage());
         } catch (Throwable $exception) {

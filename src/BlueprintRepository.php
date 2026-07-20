@@ -29,7 +29,7 @@ final class BlueprintRepository
      * preservando o status dos cursos já existentes e adicionando os novos como "Ativa".
      *
      * @param list<array<string, mixed>> $fetchedCourses
-     * @return array{added:int, total:int, previous:int}
+     * @return array{added:int, total:int, previous:int, added_ids:list<int>}
      */
     public function saveBlueprintCourses(string $blueprintId, string $baseUrl, array $fetchedCourses): array
     {
@@ -58,6 +58,7 @@ final class BlueprintRepository
             'added' => $merged['added'],
             'total' => count($merged['courses']),
             'previous' => count($existing),
+            'added_ids' => $merged['added_ids'],
         ];
     }
 
@@ -68,7 +69,7 @@ final class BlueprintRepository
      *
      * @param list<array<string, mixed>> $existing
      * @param list<array<string, mixed>> $fetched
-     * @return array{courses:list<array<string, mixed>>, added:int}
+     * @return array{courses:list<array<string, mixed>>, added:int, added_ids:list<int>}
      */
     public static function mergeCourses(array $existing, array $fetched, MongoDB\BSON\UTCDateTime $now): array
     {
@@ -80,6 +81,7 @@ final class BlueprintRepository
 
         $result = [];
         $added = 0;
+        $addedIds = [];
 
         foreach ($fetched as $course) {
             $id = (int) ($course['course_id'] ?? 0);
@@ -108,6 +110,7 @@ final class BlueprintRepository
                     'collected_at' => $now,
                 ];
                 $added++;
+                $addedIds[] = $id;
             }
         }
 
@@ -116,7 +119,7 @@ final class BlueprintRepository
             $result[(int) ($leftover['course_id'] ?? 0)] = $leftover;
         }
 
-        return ['courses' => array_values($result), 'added' => $added];
+        return ['courses' => array_values($result), 'added' => $added, 'added_ids' => $addedIds];
     }
 
     /**

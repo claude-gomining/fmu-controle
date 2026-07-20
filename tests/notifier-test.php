@@ -71,6 +71,14 @@ function last_request(string $logFile): ?array
 
 $notifier = new ActivityControlNotifier("http://127.0.0.1:{$port}", 'fmu', 5);
 
+echo "notifier: create (POST /v1/control/list)\n";
+check($notifier->notifyCreated(['FMU-0001', 'FMU-0002']) === true, 'create com sucesso retorna true');
+$request = last_request($logFile);
+check($request !== null && $request['method'] === 'POST', 'create usa método POST');
+check($request !== null && $request['uri'] === '/v1/control/list', 'URL do create é /v1/control/list (sem enable/disable)');
+$payload = $request !== null ? json_decode($request['body'], true) : null;
+check($payload === ['activityId' => 'FMU-0001,FMU-0002', 'institution' => 'fmu'], 'payload do create com activityId e institution');
+
 echo "notifier: enable\n";
 check($notifier->notifyEnabled(['FMU-0001', 'FMU-0002', 'FMU-0003']) === true, 'enable com sucesso retorna true');
 $request = last_request($logFile);

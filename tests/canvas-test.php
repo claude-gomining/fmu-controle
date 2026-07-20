@@ -124,6 +124,7 @@ foreach ($merged['courses'] as $c) {
     $byId[$c['course_id']] = $c;
 }
 check($merged['added'] === 1, 'apenas 1 curso novo contabilizado');
+check($merged['added_ids'] === [300], 'added_ids contém apenas o course_id do curso novo');
 check(count($merged['courses']) === 3, 'mantém existente atualizado + novo + removido preservado');
 check($byId[100]['status'] === 'Inativa', 'status do curso existente é preservado no merge');
 check($byId[100]['name'] === 'Atualizado', 'dados descritivos do curso existente são atualizados');

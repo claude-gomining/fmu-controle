@@ -278,29 +278,29 @@ Os dados ficam em uma collection própria (`canvas_blueprints`), com cada docume
 
 ## Integração com o serviço LTI de controle de atividades
 
-Sempre que disciplinas são ativadas ou desativadas no portal, é enviado um `PUT` para o serviço LTI de controle:
+O portal conversa com o serviço LTI de controle em três endpoints (payload sempre `{"activityId": "id1,id2,...", "institution": "..."}`):
 
-- Ativação: `{base_url}/v1/control/enable/list`
-- Desativação: `{base_url}/v1/control/disable/list`
+- Criar: `POST {base_url}/v1/control/list`
+- Ativar: `PUT {base_url}/v1/control/enable/list`
+- Desativar: `PUT {base_url}/v1/control/disable/list`
 
-Payload enviado (os códigos vêm do campo `codigo_disciplina` das disciplinas selecionadas):
+Quando são **criadas/importadas** novas atividades, o serviço é chamado na ordem **criar → ativar**: primeiro `POST /v1/control/list` para registrar, depois `PUT .../enable/list` para ativar (as novas entram como `Ativa`). Isso vale para os dois painéis:
 
-```json
-{
-    "activityId": "codigo1,codigo2,codigo3",
-    "institution": "fmu"
-}
-```
+- **FMU** (import de CSV): `activityId` = `codigo_disciplina` das disciplinas novas; `institution` = `fmu`.
+- **AFYA** (cadastro/atualização de blueprint): `activityId` = `course_id` (ID do curso no Canvas) dos cursos novos; `institution` = `afya`.
+
+O **ativar/desativar manual** do painel FMU envia `PUT enable/disable`. O toggle manual do painel **AFYA** grava apenas no banco (não notifica o serviço).
 
 Configuração por variáveis de ambiente (valores padrão já apontam para produção):
 
-```powershell
-$env:LTI_CONTROL_BASE_URL="http://prd-lti-activity-control.eba-ikyyadp3.us-east-2.elasticbeanstalk.com"
-$env:LTI_CONTROL_INSTITUTION="fmu"
-$env:LTI_CONTROL_TIMEOUT_SECONDS="5"
+```bash
+LTI_CONTROL_BASE_URL=http://prd-lti-activity-control.eba-ikyyadp3.us-east-2.elasticbeanstalk.com
+LTI_CONTROL_INSTITUTION=fmu          # institution do painel FMU
+LTI_CONTROL_INSTITUTION_AFYA=afya    # institution do painel AFYA
+LTI_CONTROL_TIMEOUT_SECONDS=5
 ```
 
-Se o serviço LTI estiver indisponível, a alteração de status no banco **é mantida** e o portal exibe um aviso pedindo para tentar novamente; o detalhe do erro fica registrado no `error_log` do servidor. O envio usa `allow_url_fopen` (habilitado por padrão no PHP).
+Se o serviço LTI estiver indisponível, a alteração no banco **é mantida** e o portal exibe um aviso; o detalhe do erro fica no `error_log` do servidor. O envio usa `allow_url_fopen` (habilitado por padrão no PHP).
 
 ## Collections
 

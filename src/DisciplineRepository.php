@@ -121,12 +121,13 @@ final class DisciplineRepository
      * reenvios do mesmo arquivo.
      *
      * @param list<array<string, mixed>> $activities
-     * @return int Quantidade efetivamente inserida (novas disciplinas)
+     * @return list<string> Códigos efetivamente inseridos (disciplinas novas)
      */
-    public function insertNewActivities(array $activities): int
+    public function insertNewActivities(array $activities): array
     {
         $bulk = new MongoDB\Driver\BulkWrite();
-        $queued = 0;
+        $codesByIndex = [];
+        $index = 0;
 
         foreach ($activities as $activity) {
             $codigo = trim((string) ($activity['codigo_disciplina'] ?? ''));
@@ -151,16 +152,27 @@ final class DisciplineRepository
                 ]],
                 ['upsert' => true]
             );
-            $queued++;
+            $codesByIndex[$index] = $codigo;
+            $index++;
         }
 
-        if ($queued === 0) {
-            return 0;
+        if ($index === 0) {
+            return [];
         }
 
         $result = $this->connection->manager()->executeBulkWrite($this->connection->namespace(), $bulk);
 
-        return $result->getUpsertedCount();
+        // getUpsertedIds() devolve [índiceDaOperação => _id] apenas das que foram
+        // realmente inseridas — mapeamos de volta para os códigos.
+        $newCodes = [];
+
+        foreach (array_keys($result->getUpsertedIds()) as $operationIndex) {
+            if (isset($codesByIndex[$operationIndex])) {
+                $newCodes[] = $codesByIndex[$operationIndex];
+            }
+        }
+
+        return $newCodes;
     }
 
     public function distinctBlocks(): array

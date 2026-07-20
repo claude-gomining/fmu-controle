@@ -150,7 +150,8 @@ check(is_string($config['security']['throttle_dir']) && $config['security']['thr
 
 echo "config: serviço LTI\n";
 check(isset($config['lti_control']['base_url']) && filter_var($config['lti_control']['base_url'], FILTER_VALIDATE_URL) !== false, 'base_url do serviço LTI é uma URL válida');
-check(($config['lti_control']['institution'] ?? '') !== '', 'institution definida');
+check(($config['lti_control']['institution'] ?? '') !== '', 'institution (fmu) definida');
+check(($config['lti_control']['institution_afya'] ?? '') !== '', 'institution_afya definida');
 check(isset($config['lti_control']['timeout_seconds']) && $config['lti_control']['timeout_seconds'] >= 1, 'timeout_seconds definido');
 
 echo "\n{$assertions} asserções, {$failures} falha(s)\n";
