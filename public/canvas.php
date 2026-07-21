@@ -24,6 +24,28 @@ if (!$auth->canAccess('afya', $config['panels'])) {
 
 $canvasCollection = $config['canvas']['collection'];
 
+const BLUEPRINT_PREVIEW_TTL = 900; // 15 min
+
+/**
+ * Cria e ativa no serviço LTI (institution afya) os cursos novos.
+ *
+ * @param list<int> $ids
+ */
+function notify_new_courses(array $config, array $ids): bool
+{
+    if ($ids === []) {
+        return true;
+    }
+
+    $notifier = new ActivityControlNotifier(
+        $config['lti_control']['base_url'],
+        $config['lti_control']['institution_afya'],
+        $config['lti_control']['timeout_seconds']
+    );
+
+    return $notifier->notifyCreated($ids) && $notifier->notifyEnabled($ids);
+}
+
 function canvas_repository(array $config): BlueprintRepository
 {
     $connection = new MongoConnection(
@@ -54,7 +76,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'register_blueprint' || $action === 'refresh_blueprint') {
+    // Cancela a pré-visualização pendente do cadastro.
+    if ($action === 'cancel_blueprint') {
+        unset($_SESSION['blueprint_preview']);
+        redirect_to('canvas.php');
+    }
+
+    // Passo 1 do cadastro: busca os cursos no Canvas e monta a pré-visualização
+    // (nada é gravado ainda).
+    if ($action === 'preview_blueprint') {
+        $blueprintId = trim((string) ($_POST['blueprint_id'] ?? ''));
+
+        if ($blueprintId === '' || !ctype_digit($blueprintId)) {
+            flash_set('error', 'Informe um código de blueprint válido (apenas números).');
+            redirect_to('canvas.php');
+        }
+
+        try {
+            $courses = canvas_client($config)->fetchAssociatedCourses($blueprintId);
+            $newCourses = canvas_repository($config)->newCoursesPreview($blueprintId, $courses);
+
+            $_SESSION['blueprint_preview'] = [
+                'ts' => time(),
+                'blueprint_id' => $blueprintId,
+                'courses' => $courses,
+                'new_courses' => $newCourses,
+                'summary' => [
+                    'new' => count($newCourses),
+                    'total' => count($courses),
+                    'existing' => count($courses) - count($newCourses),
+                ],
+            ];
+        } catch (CanvasException $exception) {
+            flash_set('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            error_log('Falha ao pré-visualizar blueprint do Canvas: ' . $exception->getMessage());
+            flash_set('error', 'Não foi possível buscar os cursos. Tente novamente mais tarde.');
+        }
+
+        redirect_to('canvas.php');
+    }
+
+    // Passo 2 do cadastro: confirma e grava os cursos da pré-visualização.
+    if ($action === 'confirm_blueprint') {
+        $preview = $_SESSION['blueprint_preview'] ?? null;
+        unset($_SESSION['blueprint_preview']);
+
+        if (!is_array($preview) || empty($preview['courses']) || (time() - (int) ($preview['ts'] ?? 0)) > BLUEPRINT_PREVIEW_TTL) {
+            flash_set('error', 'A pré-visualização expirou. Cadastre a blueprint novamente.');
+            redirect_to('canvas.php');
+        }
+
+        try {
+            $blueprintId = (string) $preview['blueprint_id'];
+            $result = canvas_repository($config)->saveBlueprintCourses(
+                $blueprintId,
+                $config['canvas']['base_url'],
+                $preview['courses']
+            );
+            $notified = notify_new_courses($config, $result['added_ids']);
+
+            $message = sprintf(
+                'Blueprint %s cadastrada: %d curso(s) adicionado(s) e ativado(s); %d no total.',
+                $blueprintId,
+                $result['added'],
+                $result['total']
+            );
+
+            if ($notified) {
+                flash_set('success', $message);
+            } else {
+                flash_set('error', $message . ' Atenção: não foi possível registrar/ativar os novos cursos no serviço de correção automática.');
+            }
+        } catch (Throwable $exception) {
+            error_log('Falha ao cadastrar blueprint do Canvas: ' . $exception->getMessage());
+            flash_set('error', 'Não foi possível concluir o cadastro. Tente novamente mais tarde.');
+        }
+
+        redirect_to('canvas.php');
+    }
+
+    // "Atualizar" uma blueprint já cadastrada: busca novos cursos e grava direto.
+    if ($action === 'refresh_blueprint') {
         $blueprintId = trim((string) ($_POST['blueprint_id'] ?? ''));
 
         if ($blueprintId === '' || !ctype_digit($blueprintId)) {
@@ -65,31 +168,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $repository = canvas_repository($config);
 
-            if ($action === 'refresh_blueprint' && !$repository->blueprintExists($blueprintId)) {
+            if (!$repository->blueprintExists($blueprintId)) {
                 flash_set('error', 'Blueprint não encontrada no cadastro. Registre-a primeiro.');
                 redirect_to('canvas.php');
             }
 
             $courses = canvas_client($config)->fetchAssociatedCourses($blueprintId);
             $result = $repository->saveBlueprintCourses($blueprintId, $config['canvas']['base_url'], $courses);
+            $notified = notify_new_courses($config, $result['added_ids']);
 
-            // Cursos novos: primeiro criar no serviço LTI, depois ativar (institution afya).
-            $notified = true;
-
-            if ($result['added_ids'] !== []) {
-                $notifier = new ActivityControlNotifier(
-                    $config['lti_control']['base_url'],
-                    $config['lti_control']['institution_afya'],
-                    $config['lti_control']['timeout_seconds']
-                );
-                $created = $notifier->notifyCreated($result['added_ids']);
-                $enabled = $notifier->notifyEnabled($result['added_ids']);
-                $notified = $created && $enabled;
-            }
-
-            $message = $action === 'register_blueprint'
-                ? sprintf('Blueprint %s cadastrada: %d curso(s) coletado(s).', $blueprintId, $result['total'])
-                : sprintf('Blueprint %s atualizada: %d curso(s) novo(s), %d no total.', $blueprintId, $result['added'], $result['total']);
+            $message = sprintf('Blueprint %s atualizada: %d curso(s) novo(s), %d no total.', $blueprintId, $result['added'], $result['total']);
 
             if ($notified) {
                 flash_set('success', $message);
@@ -99,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (CanvasException $exception) {
             flash_set('error', $exception->getMessage());
         } catch (Throwable $exception) {
-            error_log('Falha ao processar blueprint do Canvas: ' . $exception->getMessage());
+            error_log('Falha ao atualizar blueprint do Canvas: ' . $exception->getMessage());
             flash_set('error', 'Não foi possível concluir a operação. Tente novamente mais tarde.');
         }
 
@@ -166,6 +254,16 @@ try {
     $error = 'Não foi possível carregar as blueprints. Tente novamente mais tarde.';
 }
 
+// Pré-visualização de cadastro pendente (se ainda válida).
+$blueprintPreview = null;
+if (isset($_SESSION['blueprint_preview']) && is_array($_SESSION['blueprint_preview'])) {
+    if ((time() - (int) ($_SESSION['blueprint_preview']['ts'] ?? 0)) <= BLUEPRINT_PREVIEW_TTL) {
+        $blueprintPreview = $_SESSION['blueprint_preview'];
+    } else {
+        unset($_SESSION['blueprint_preview']);
+    }
+}
+
 $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
 ?>
 <!doctype html>
@@ -217,18 +315,67 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
         <div class="cv-alert cv-alert-error"><?= e($error) ?></div>
     <?php endif; ?>
 
-    <section class="cv-card cv-register">
-        <div>
-            <h2>Cadastrar blueprint</h2>
-            <p>Informe o código (ID do curso da blueprint no Canvas). Os cursos associados serão buscados e cadastrados.</p>
-        </div>
-        <form method="post" class="cv-register-form" data-loading>
-            <input type="hidden" name="action" value="register_blueprint">
-            <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
-            <input class="cv-input" name="blueprint_id" inputmode="numeric" pattern="[0-9]+" placeholder="Ex.: 130764" required>
-            <button class="cv-btn cv-btn-primary" type="submit">Cadastrar e buscar</button>
-        </form>
-    </section>
+    <?php if ($blueprintPreview !== null): ?>
+        <?php $bp = $blueprintPreview; $bs = $bp['summary']; ?>
+        <section class="cv-card">
+            <h2 style="margin-top:0">Confira antes de cadastrar</h2>
+            <p>Blueprint <strong><?= e($bp['blueprint_id']) ?></strong> · <?= e($bs['total']) ?> curso(s) encontrado(s) no Canvas. Nada foi gravado ainda.</p>
+            <p>
+                <strong style="font-size:20px"><?= e($bs['new']) ?></strong> curso(s) <strong>serão cadastrados e ativados</strong><?php if ($bs['existing'] > 0): ?> · <?= e($bs['existing']) ?> já cadastrado(s) (não serão alterados)<?php endif; ?>.
+            </p>
+
+            <?php if ($bp['new_courses'] === []): ?>
+                <p class="cv-empty-inline">Nenhum curso novo para cadastrar — todos os cursos desta blueprint já estão registrados.</p>
+            <?php else: ?>
+                <div class="cv-table-wrap" style="max-height:320px;overflow-y:auto">
+                    <table class="cv-table">
+                        <thead>
+                        <tr>
+                            <th>ID do curso</th>
+                            <th>Nome</th>
+                            <th>Termo</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($bp['new_courses'] as $course): ?>
+                            <tr>
+                                <td><code><?= e($course['course_id']) ?></code><?= $course['sis_course_id'] !== '' ? ' <small>· SIS ' . e($course['sis_course_id']) . '</small>' : '' ?></td>
+                                <td class="cv-course-name"><?= e($course['name'] !== '' ? $course['name'] : '—') ?></td>
+                                <td><?= e($course['term_name'] !== '' ? $course['term_name'] : '—') ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+
+            <div class="cv-bulk-actions" style="margin-top:18px">
+                <form method="post" data-loading>
+                    <input type="hidden" name="action" value="confirm_blueprint">
+                    <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
+                    <button class="cv-btn cv-btn-primary" type="submit"<?= $bs['new'] === 0 ? ' disabled' : '' ?>>Aceitar e cadastrar <?= e($bs['new']) ?> curso(s)</button>
+                </form>
+                <form method="post">
+                    <input type="hidden" name="action" value="cancel_blueprint">
+                    <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
+                    <button class="cv-btn cv-btn-ghost" type="submit">Cancelar</button>
+                </form>
+            </div>
+        </section>
+    <?php else: ?>
+        <section class="cv-card cv-register">
+            <div>
+                <h2>Cadastrar blueprint</h2>
+                <p>Informe o código (ID do curso da blueprint no Canvas). Você verá a lista dos cursos que serão cadastrados e ativados antes de confirmar.</p>
+            </div>
+            <form method="post" class="cv-register-form" data-loading>
+                <input type="hidden" name="action" value="preview_blueprint">
+                <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
+                <input class="cv-input" name="blueprint_id" inputmode="numeric" pattern="[0-9]+" placeholder="Ex.: 130764" required>
+                <button class="cv-btn cv-btn-primary" type="submit">Buscar cursos</button>
+            </form>
+        </section>
+    <?php endif; ?>
 
     <section class="cv-toolbar">
         <form method="get" class="cv-filter-form">

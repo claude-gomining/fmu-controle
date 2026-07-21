@@ -288,7 +288,7 @@ $env:CANVAS_PAGE_SIZE="10"                            # blueprints por página
 
 Fluxo:
 
-- **Cadastrar blueprint:** informe o código (apenas números). O portal chama a API do Canvas (`/api/v1/courses/{id}/blueprint_templates/default/associated_courses`), seguindo automaticamente a paginação (header `Link`), grava tudo no banco e volta para a lista. Durante a busca, uma tela de **"Aguarde"** é exibida.
+- **Cadastrar blueprint:** informe o código (apenas números). O portal chama a API do Canvas (`/api/v1/courses/{id}/blueprint_templates/default/associated_courses`), seguindo automaticamente a paginação (header `Link`). Durante a busca, uma tela de **"Aguarde"** é exibida. Antes de gravar, é mostrada uma **pré-visualização** com a lista dos cursos que serão **cadastrados e ativados** (e quantos já existem); nada é gravado até o usuário clicar em **Aceitar**. O botão **Cancelar** descarta. A pré-visualização fica na sessão e expira em 15 minutos.
 - **Listagem:** as blueprints aparecem paginadas, cada uma com seus cursos encadeados (nome, ID do curso, SIS, termo, data de coleta e status). Há um campo de **filtro por ID ou nome** de curso.
 - **Ativar/desativar:** por curso (seleção múltipla) ou a blueprint inteira (selecionar todos). O status é gravado apenas no banco (sem chamadas externas).
 - **Atualizar:** cada blueprint tem um botão que rebusca no Canvas os cursos — os novos entram como `Ativa`, os já existentes mantêm o status atual, e os que saíram da blueprint são preservados.

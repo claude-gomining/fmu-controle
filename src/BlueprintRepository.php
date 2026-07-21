@@ -63,6 +63,42 @@ final class BlueprintRepository
     }
 
     /**
+     * Dado o resultado buscado no Canvas, retorna os cursos que AINDA NÃO estão
+     * salvos para esta blueprint (os que seriam cadastrados e ativados), sem
+     * gravar nada. Usado para a pré-visualização do cadastro.
+     *
+     * @param list<array<string, mixed>> $fetchedCourses
+     * @return list<array{course_id:int, name:string, term_name:string, sis_course_id:string}>
+     */
+    public function newCoursesPreview(string $blueprintId, array $fetchedCourses): array
+    {
+        $existingIds = [];
+
+        foreach ($this->findCourses($blueprintId) as $course) {
+            $existingIds[(int) ($course['course_id'] ?? 0)] = true;
+        }
+
+        $new = [];
+
+        foreach ($fetchedCourses as $course) {
+            $id = (int) ($course['course_id'] ?? 0);
+
+            if ($id === 0 || isset($existingIds[$id]) || isset($new[$id])) {
+                continue;
+            }
+
+            $new[$id] = [
+                'course_id' => $id,
+                'name' => (string) ($course['name'] ?? ''),
+                'term_name' => (string) ($course['term_name'] ?? ''),
+                'sis_course_id' => (string) ($course['sis_course_id'] ?? ''),
+            ];
+        }
+
+        return array_values($new);
+    }
+
+    /**
      * Combina os cursos existentes com os recém-buscados: mantém o status dos que
      * já existem (atualizando os dados descritivos e a data de coleta), adiciona os
      * novos como "Ativa" e preserva os que deixaram de ser retornados.
