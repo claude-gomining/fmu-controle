@@ -96,6 +96,16 @@ sudo bash scripts/setup-ssl.sh controle.gomining-lti.com
 
 O `setup-ssl.sh` instala o `certbot` (plugin do Apache), cria o virtual host do domínio apontando para o mesmo `/var/www/html`, obtém/instala o certificado do Let's Encrypt e ativa o **redirecionamento HTTP→HTTPS**. Pré-requisitos: o domínio já resolvendo para o IP do servidor e as **portas 80 e 443 abertas** no Security Group / Lightsail. A partir daí, o cookie de sessão recebe a flag `Secure` e o HSTS é enviado automaticamente (a aplicação detecta o HTTPS sozinha — nada a mudar no código).
 
+### Completar a configuração depois (só o que falta)
+
+Se você já tem um `/etc/fmu-portal.env` parcial e quer preencher apenas as configurações/credenciais que **ainda não existem**, use:
+
+```bash
+sudo bash scripts/configure-env.sh
+```
+
+Ele verifica o que já está definido (no arquivo **ou** no ambiente), lista essas como "já configurada" e **pergunta apenas as que faltam**, acrescentando-as ao arquivo **sem alterar** as existentes (faz backup antes). Não instala nada nem publica arquivos — é só para a configuração. Se nada estiver faltando, não faz alterações.
+
 ### Passo a passo manual
 
 Caso prefira configurar manualmente com **Nginx + PHP-FPM**, siga os passos abaixo (Ubuntu 22.04/24.04). Ajuste a versão do PHP (`8.3` nos exemplos) conforme a instalada. Neste modo, o projeto pode ficar em `/var/www/fmu-controle` com o DocumentRoot em `public/`.
