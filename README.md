@@ -271,6 +271,10 @@ O envio **não grava nada de imediato**: primeiro é exibida uma pré-visualiza�
 
 Só depois de clicar em **Confirmar** é que as novas disciplinas são gravadas (e registradas/ativadas no serviço LTI). O botão **Cancelar** descarta a pré-visualização. A pré-visualização fica na sessão e expira em 15 minutos.
 
+### Cadastrar códigos como Inativa (lista de CRT)
+
+Há um segundo modo de importação que recebe **apenas uma lista de CRT** (um código por linha; também aceita separados por `;` ou `,`, e um cabeçalho `CRT` opcional). Os códigos ainda não cadastrados são adicionados com status **`Inativa`**, gravando **somente `codigo_disciplina` + `status`** — sem nome, bloco ou ano. Na listagem, esses registros aparecem com nome/bloco/ano como `—`. Também passa pela pré-visualização (novos × já existentes) antes de gravar, e no serviço LTI é feito **criar → desativar** para os novos.
+
 ## Página Canvas (controle de cursos por blueprint)
 
 A página `canvas.php` é uma segunda interface (layout próprio) para clientes que usam o Canvas. A partir do código de uma **blueprint** (ID do curso da blueprint no Canvas), o portal busca todos os cursos associados e os cadastra para controle de correção.

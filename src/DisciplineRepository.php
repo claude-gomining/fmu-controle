@@ -217,6 +217,61 @@ final class DisciplineRepository
         return $newCodes;
     }
 
+    /**
+     * Insere apenas os códigos ainda inexistentes gravando SOMENTE
+     * codigo_disciplina + status + data (sem nome, bloco ou ano). Disciplinas
+     * já cadastradas não são alteradas.
+     *
+     * @param list<string> $codes
+     * @return list<string> Códigos efetivamente inseridos
+     */
+    public function insertNewCodes(array $codes, string $status): array
+    {
+        $bulk = new MongoDB\Driver\BulkWrite();
+        $codesByIndex = [];
+        $index = 0;
+
+        foreach ($codes as $code) {
+            $code = trim((string) $code);
+
+            if ($code === '') {
+                continue;
+            }
+
+            $bulk->update(
+                ['$or' => [
+                    ['codigo_disciplina' => $code],
+                    ['Codigo da Disciplina' => $code],
+                    ['Código da Disciplina' => $code],
+                ]],
+                ['$setOnInsert' => [
+                    'codigo_disciplina' => $code,
+                    'status' => $status,
+                    'data' => new MongoDB\BSON\UTCDateTime((int) (microtime(true) * 1000)),
+                ]],
+                ['upsert' => true]
+            );
+            $codesByIndex[$index] = $code;
+            $index++;
+        }
+
+        if ($index === 0) {
+            return [];
+        }
+
+        $result = $this->connection->manager()->executeBulkWrite($this->connection->namespace(), $bulk);
+
+        $newCodes = [];
+
+        foreach (array_keys($result->getUpsertedIds()) as $operationIndex) {
+            if (isset($codesByIndex[$operationIndex])) {
+                $newCodes[] = $codesByIndex[$operationIndex];
+            }
+        }
+
+        return $newCodes;
+    }
+
     public function distinctBlocks(): array
     {
         $values = [];

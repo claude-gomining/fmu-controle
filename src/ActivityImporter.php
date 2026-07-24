@@ -127,4 +127,76 @@ final class ActivityImporter
             'dataRows' => $dataRows,
         ];
     }
+
+    /**
+     * Lê um arquivo contendo apenas uma lista de CRT (códigos de disciplina) —
+     * um por linha (também aceita vários por linha separados por ";" ou ","),
+     * com um cabeçalho "CRT" opcional. Faz trim e remove duplicados.
+     *
+     * @return array{codes: list<string>, duplicates: int, lines: int}
+     */
+    public function parseCodesCsv(string $filePath): array
+    {
+        $content = @file_get_contents($filePath);
+
+        if ($content === false) {
+            throw new ImportException('Não foi possível ler o arquivo enviado.');
+        }
+
+        if (trim($content) === '') {
+            throw new ImportException('O arquivo enviado está vazio.');
+        }
+
+        if (!mb_check_encoding($content, 'UTF-8')) {
+            $content = mb_convert_encoding($content, 'UTF-8', 'Windows-1252');
+        }
+
+        $content = preg_replace('/^\xEF\xBB\xBF/', '', $content) ?? $content;
+
+        $codes = [];
+        $duplicates = 0;
+        $lines = 0;
+        $seen = [];
+
+        foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
+            foreach (preg_split('/[;,]/', $line) ?: [] as $token) {
+                $code = trim((string) $token);
+
+                if ($code === '') {
+                    continue;
+                }
+
+                // Ignora um cabeçalho "CRT".
+                if (mb_strtoupper($code) === 'CRT') {
+                    continue;
+                }
+
+                $lines++;
+
+                if ($lines > $this->maxRows) {
+                    throw new ImportException('O arquivo excede o limite de ' . $this->maxRows . ' códigos.');
+                }
+
+                $key = mb_strtolower($code);
+
+                if (isset($seen[$key])) {
+                    $duplicates++;
+                    continue;
+                }
+
+                $seen[$key] = true;
+                $codes[] = $code;
+            }
+        }
+
+        if ($codes === []) {
+            throw new ImportException('Nenhum código (CRT) encontrado no arquivo.');
+        }
+
+        return [
+            'codes' => $codes,
+            'duplicates' => $duplicates,
+            'lines' => $lines,
+        ];
+    }
 }

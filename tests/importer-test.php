@@ -128,6 +128,32 @@ try {
 }
 check($ok, 'excede o limite de linhas configurado');
 
+echo "importer: parseCodesCsv (lista de CRT)\n";
+$result = $importer->parseCodesCsv(csv_file("FMU-0001\nFMU-0002\nFMU-0003\n"));
+check($result['codes'] === ['FMU-0001', 'FMU-0002', 'FMU-0003'], 'um código por linha');
+check($result['duplicates'] === 0 && $result['lines'] === 3, 'contagem de linhas sem duplicados');
+
+$result = $importer->parseCodesCsv(csv_file("CRT\n  FMU-0001  \nFMU-0002\n"));
+check($result['codes'] === ['FMU-0001', 'FMU-0002'], 'cabeçalho CRT ignorado e trim aplicado');
+
+$result = $importer->parseCodesCsv(csv_file("FMU-1;FMU-2,FMU-3\nFMU-4\n"));
+check($result['codes'] === ['FMU-1', 'FMU-2', 'FMU-3', 'FMU-4'], 'aceita vários por linha separados por ; ou ,');
+
+$result = $importer->parseCodesCsv(csv_file("FMU-1\nfmu-1\nFMU-2\n\n"));
+check($result['codes'] === ['FMU-1', 'FMU-2'] && $result['duplicates'] === 1, 'duplicados (case-insensitive) e linhas vazias tratados');
+
+$latin1 = mb_convert_encoding("FMU-1\nCOMUNICAÇÃO-2\n", 'Windows-1252', 'UTF-8');
+$result = $importer->parseCodesCsv(csv_file($latin1));
+check($result['codes'] === ['FMU-1', 'COMUNICAÇÃO-2'], 'encoding Windows-1252 convertido');
+
+$ok = false;
+try {
+    $importer->parseCodesCsv(csv_file("CRT\n\n  \n"));
+} catch (ImportException $e) {
+    $ok = str_contains($e->getMessage(), 'Nenhum código');
+}
+check($ok, 'arquivo só com cabeçalho/linhas vazias lança ImportException');
+
 echo "Auth: controle de acesso admin\n";
 $_SESSION = ['user' => 'Gomining', 'username' => 'gomining'];
 $auth = new Auth();

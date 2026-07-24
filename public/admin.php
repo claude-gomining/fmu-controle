@@ -21,6 +21,42 @@ function admin_repository(array $config): DisciplineRepository
     ));
 }
 
+/**
+ * Valida o upload de um CSV e devolve o caminho temporário; em caso de erro,
+ * grava a mensagem e redireciona (não retorna).
+ */
+function admin_uploaded_csv_path(mixed $file, array $config): string
+{
+    if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        flash_set('error', 'Selecione um arquivo CSV para enviar.');
+        redirect_to('admin.php');
+    }
+
+    if (($file['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_INI_SIZE || ($file['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_FORM_SIZE) {
+        flash_set('error', 'Arquivo muito grande.');
+        redirect_to('admin.php');
+    }
+
+    if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK || !is_uploaded_file((string) $file['tmp_name'])) {
+        flash_set('error', 'Falha no upload do arquivo. Tente novamente.');
+        redirect_to('admin.php');
+    }
+
+    if ((int) $file['size'] > $config['upload']['max_bytes']) {
+        flash_set('error', 'Arquivo muito grande. Limite de ' . (int) round($config['upload']['max_bytes'] / 1048576) . ' MB.');
+        redirect_to('admin.php');
+    }
+
+    $extension = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+
+    if (!in_array($extension, ['csv', 'txt'], true)) {
+        flash_set('error', 'Formato não suportado. Envie um arquivo CSV (.csv ou .txt).');
+        redirect_to('admin.php');
+    }
+
+    return (string) $file['tmp_name'];
+}
+
 if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf($_POST['_csrf_token'] ?? null)) {
         flash_set('error', 'Sessão expirada. Tente novamente.');
@@ -29,55 +65,30 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
 
-    // Cancelar a pré-visualização pendente.
     if ($action === 'cancel_import') {
         unset($_SESSION['import_preview']);
         redirect_to('admin.php');
     }
 
-    // Passo 1: enviar o arquivo e gerar a pré-visualização (sem gravar nada).
+    if ($action === 'cancel_codes') {
+        unset($_SESSION['import_codes_preview']);
+        redirect_to('admin.php');
+    }
+
+    // ----- Planilha completa (CRT;DISCIPLINA;BLOCO;ANO): pré-visualização -----
     if ($action === 'preview') {
-        $file = $_FILES['spreadsheet'] ?? null;
-
-        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
-            flash_set('error', 'Selecione um arquivo CSV para enviar.');
-            redirect_to('admin.php');
-        }
-
-        if (($file['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_INI_SIZE || ($file['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_FORM_SIZE) {
-            flash_set('error', 'Arquivo muito grande.');
-            redirect_to('admin.php');
-        }
-
-        if (($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK || !is_uploaded_file((string) $file['tmp_name'])) {
-            flash_set('error', 'Falha no upload do arquivo. Tente novamente.');
-            redirect_to('admin.php');
-        }
-
-        if ((int) $file['size'] > $config['upload']['max_bytes']) {
-            flash_set('error', 'Arquivo muito grande. Limite de ' . (int) round($config['upload']['max_bytes'] / 1048576) . ' MB.');
-            redirect_to('admin.php');
-        }
-
-        $extension = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
-
-        if (!in_array($extension, ['csv', 'txt'], true)) {
-            flash_set('error', 'Formato não suportado. Envie um arquivo CSV separado por ponto-e-vírgula.');
-            redirect_to('admin.php');
-        }
+        $tmpPath = admin_uploaded_csv_path($_FILES['spreadsheet'] ?? null, $config);
 
         try {
             $repository = admin_repository($config);
             $importer = new ActivityImporter($config['upload']['max_rows']);
-
-            $parsed = $importer->parseCsv((string) $file['tmp_name']);
+            $parsed = $importer->parseCsv($tmpPath);
 
             if ($parsed['activities'] === []) {
                 flash_set('error', 'Nenhuma linha válida encontrada no arquivo (todas sem CRT ou em branco).');
                 redirect_to('admin.php');
             }
 
-            // Consulta no banco quais códigos já existem.
             $codes = array_map(static fn (array $a): string => (string) $a['codigo_disciplina'], $parsed['activities']);
             $existingSet = array_fill_keys($repository->existingCodes($codes), true);
 
@@ -104,7 +115,7 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $_SESSION['import_preview'] = [
                 'ts' => time(),
-                'file_name' => (string) $file['name'],
+                'file_name' => (string) ($_FILES['spreadsheet']['name'] ?? 'arquivo.csv'),
                 'activities' => $parsed['activities'],
                 'summary' => [
                     'new' => $newCount,
@@ -125,7 +136,6 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_to('admin.php');
     }
 
-    // Passo 2: confirmar a importação da pré-visualização.
     if ($action === 'confirm_import') {
         $preview = $_SESSION['import_preview'] ?? null;
         unset($_SESSION['import_preview']);
@@ -150,22 +160,109 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $config['lti_control']['institution'],
                     $config['lti_control']['timeout_seconds']
                 );
-                $created = $notifier->notifyCreated($newCodes);
-                $enabled = $notifier->notifyEnabled($newCodes);
-                $notified = $created && $enabled;
+                $notified = $notifier->notifyCreated($newCodes) && $notifier->notifyEnabled($newCodes);
             }
 
             $message = sprintf('%d disciplina(s) adicionada(s); %d já cadastrada(s).', $inserted, $existing);
 
             if (!$notified) {
-                $message .= ' Atenção: não foi possível registrar/ativar todas no serviço de correção automática.';
-                flash_set('error', $message);
+                flash_set('error', $message . ' Atenção: não foi possível registrar/ativar todas no serviço de correção automática.');
             } else {
                 flash_set('success', $message);
             }
         } catch (Throwable $exception) {
             error_log('Falha ao importar planilha: ' . $exception->getMessage());
             flash_set('error', 'Não foi possível importar o arquivo. Tente novamente mais tarde.');
+        }
+
+        redirect_to('admin.php');
+    }
+
+    // ----- Lista de CRT como Inativa: pré-visualização -----
+    if ($action === 'preview_codes') {
+        $tmpPath = admin_uploaded_csv_path($_FILES['codes'] ?? null, $config);
+
+        try {
+            $repository = admin_repository($config);
+            $importer = new ActivityImporter($config['upload']['max_rows']);
+            $parsed = $importer->parseCodesCsv($tmpPath);
+
+            $existingSet = array_fill_keys($repository->existingCodes($parsed['codes']), true);
+
+            $newCount = 0;
+            $sample = [];
+
+            foreach ($parsed['codes'] as $index => $code) {
+                $isNew = !isset($existingSet[$code]);
+
+                if ($isNew) {
+                    $newCount++;
+                }
+
+                if ($index < 12) {
+                    $sample[] = ['code' => (string) $code, 'is_new' => $isNew];
+                }
+            }
+
+            $_SESSION['import_codes_preview'] = [
+                'ts' => time(),
+                'file_name' => (string) ($_FILES['codes']['name'] ?? 'codigos.csv'),
+                'codes' => $parsed['codes'],
+                'summary' => [
+                    'new' => $newCount,
+                    'existing' => count($parsed['codes']) - $newCount,
+                    'duplicates' => $parsed['duplicates'],
+                    'lines' => $parsed['lines'],
+                ],
+                'sample' => $sample,
+            ];
+        } catch (ImportException $exception) {
+            flash_set('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            error_log('Falha ao pré-visualizar códigos: ' . $exception->getMessage());
+            flash_set('error', 'Não foi possível ler o arquivo. Tente novamente mais tarde.');
+        }
+
+        redirect_to('admin.php');
+    }
+
+    if ($action === 'confirm_codes') {
+        $preview = $_SESSION['import_codes_preview'] ?? null;
+        unset($_SESSION['import_codes_preview']);
+
+        if (!is_array($preview) || empty($preview['codes']) || (time() - (int) ($preview['ts'] ?? 0)) > IMPORT_PREVIEW_TTL) {
+            flash_set('error', 'A pré-visualização expirou. Envie o arquivo novamente.');
+            redirect_to('admin.php');
+        }
+
+        try {
+            $repository = admin_repository($config);
+            $newCodes = $repository->insertNewCodes($preview['codes'], 'Inativa');
+            $inserted = count($newCodes);
+            $existing = count($preview['codes']) - $inserted;
+
+            // Atividades novas (inativas): primeiro criar no serviço LTI, depois desativar.
+            $notified = true;
+
+            if ($newCodes !== []) {
+                $notifier = new ActivityControlNotifier(
+                    $config['lti_control']['base_url'],
+                    $config['lti_control']['institution'],
+                    $config['lti_control']['timeout_seconds']
+                );
+                $notified = $notifier->notifyCreated($newCodes) && $notifier->notifyDisabled($newCodes);
+            }
+
+            $message = sprintf('%d código(s) cadastrado(s) como Inativa; %d já cadastrado(s).', $inserted, $existing);
+
+            if (!$notified) {
+                flash_set('error', $message . ' Atenção: não foi possível registrar/desativar todos no serviço de correção automática.');
+            } else {
+                flash_set('success', $message);
+            }
+        } catch (Throwable $exception) {
+            error_log('Falha ao cadastrar códigos inativos: ' . $exception->getMessage());
+            flash_set('error', 'Não foi possível concluir o cadastro. Tente novamente mais tarde.');
         }
 
         redirect_to('admin.php');
@@ -178,15 +275,23 @@ if (!$isAdmin) {
 
 $flash = flash_get();
 
-// Pré-visualização pendente (se ainda válida).
-$preview = null;
-if ($isAdmin && isset($_SESSION['import_preview']) && is_array($_SESSION['import_preview'])) {
-    if ((time() - (int) ($_SESSION['import_preview']['ts'] ?? 0)) <= IMPORT_PREVIEW_TTL) {
-        $preview = $_SESSION['import_preview'];
-    } else {
-        unset($_SESSION['import_preview']);
+function admin_pending_preview(string $key): ?array
+{
+    if (!isset($_SESSION[$key]) || !is_array($_SESSION[$key])) {
+        return null;
     }
+
+    if ((time() - (int) ($_SESSION[$key]['ts'] ?? 0)) <= IMPORT_PREVIEW_TTL) {
+        return $_SESSION[$key];
+    }
+
+    unset($_SESSION[$key]);
+
+    return null;
 }
+
+$preview = $isAdmin ? admin_pending_preview('import_preview') : null;
+$codesPreview = $isAdmin ? admin_pending_preview('import_codes_preview') : null;
 ?>
 <!doctype html>
 <html lang="pt-BR">
@@ -298,6 +403,58 @@ if ($isAdmin && isset($_SESSION['import_preview']) && is_array($_SESSION['import
                     </form>
                 </div>
             </section>
+        <?php elseif ($codesPreview !== null): ?>
+            <?php $cs = $codesPreview['summary']; ?>
+            <section class="table-card" style="padding:28px">
+                <h2 style="margin-top:0">Confira antes de cadastrar (códigos inativos)</h2>
+                <p class="login-copy">Arquivo: <strong><?= e($codesPreview['file_name']) ?></strong> · <?= e($cs['lines']) ?> código(s) no arquivo. Nada foi gravado ainda.</p>
+
+                <div class="import-summary" style="display:flex;gap:24px;flex-wrap:wrap;margin:18px 0">
+                    <div><strong style="font-size:24px"><?= e($cs['new']) ?></strong><br>código(s) <strong>novos</strong> (serão cadastrados como <strong>Inativa</strong>)</div>
+                    <div><strong style="font-size:24px"><?= e($cs['existing']) ?></strong><br>já cadastrados (não serão adicionados)</div>
+                    <div><strong style="font-size:24px"><?= e($cs['duplicates']) ?></strong><br>repetidos no próprio arquivo (ignorados)</div>
+                </div>
+
+                <p class="login-copy">Os códigos novos entram apenas com <strong>código e status Inativa</strong> — sem nome, bloco ou ano (aparecem como &ldquo;—&rdquo; na listagem).</p>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>CRT<br><small>→ codigo_disciplina</small></th>
+                            <th>Situação</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($codesPreview['sample'] as $row): ?>
+                            <tr>
+                                <td><code><?= e($row['code']) ?></code></td>
+                                <td>
+                                    <span class="status-badge <?= $row['is_new'] ? 'is-active' : 'is-inactive' ?>">
+                                        <?= $row['is_new'] ? 'Novo' : 'Já existe' ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php if ($cs['lines'] > count($codesPreview['sample'])): ?>
+                    <p class="login-copy"><small>Mostrando os primeiros <?= e(count($codesPreview['sample'])) ?> de <?= e($cs['lines']) ?>.</small></p>
+                <?php endif; ?>
+
+                <div class="filter-actions" style="margin-top:20px;display:flex;gap:10px">
+                    <form method="post">
+                        <input type="hidden" name="action" value="confirm_codes">
+                        <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
+                        <button class="btn btn-primary" type="submit"<?= $cs['new'] === 0 ? ' disabled' : '' ?>>Cadastrar <?= e($cs['new']) ?> como Inativa</button>
+                    </form>
+                    <form method="post">
+                        <input type="hidden" name="action" value="cancel_codes">
+                        <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
+                        <button class="btn btn-ghost" type="submit">Cancelar</button>
+                    </form>
+                </div>
+            </section>
         <?php else: ?>
             <section class="table-card" style="padding:28px">
                 <h2 style="margin-top:0">Importar disciplinas por planilha</h2>
@@ -305,14 +462,12 @@ if ($isAdmin && isset($_SESSION['import_preview']) && is_array($_SESSION['import
                     Envie um arquivo <strong>CSV separado por ponto-e-vírgula</strong> (Excel &rarr; Salvar como &rarr; CSV).
                     Você verá uma <strong>pré-visualização</strong> (quantas são novas, quantas já existem e o mapeamento das colunas) antes de gravar qualquer coisa.
                 </p>
-                <p class="login-copy">
-                    A primeira linha deve ser exatamente o cabeçalho:
-                </p>
+                <p class="login-copy">A primeira linha deve ser exatamente o cabeçalho:</p>
                 <p><code>CRT;DISCIPLINA;BLOCO;ANO</code></p>
                 <p class="login-copy">
                     Onde <strong>CRT</strong> é o nome/código da oferta (usado como identificador único),
                     <strong>DISCIPLINA</strong> o nome, <strong>BLOCO</strong> o bloco e <strong>ANO</strong> o ano.
-                    Cada linha corresponde a uma disciplina; os espaços em branco no início e fim de cada célula são removidos.
+                    Novas disciplinas entram como <strong>Ativa</strong>.
                 </p>
 
                 <form method="post" enctype="multipart/form-data" class="filters-form" style="margin-top:20px">
@@ -322,6 +477,29 @@ if ($isAdmin && isset($_SESSION['import_preview']) && is_array($_SESSION['import
                     <div class="field search-field">
                         <label for="spreadsheet">Arquivo CSV</label>
                         <input class="input" id="spreadsheet" name="spreadsheet" type="file" accept=".csv,text/csv,text/plain" required>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn btn-primary" type="submit">Pré-visualizar</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="table-card" style="padding:28px">
+                <h2 style="margin-top:0">Cadastrar códigos como Inativa</h2>
+                <p class="login-copy">
+                    Envie um arquivo com <strong>apenas a lista de CRT</strong> (um código por linha; também aceita separados por <code>;</code> ou <code>,</code>). Um cabeçalho <code>CRT</code> na primeira linha é opcional.
+                </p>
+                <p class="login-copy">
+                    Os códigos ainda não cadastrados são adicionados com status <strong>Inativa</strong>, gravando apenas o código — <strong>sem nome, bloco ou ano</strong>. Você verá uma pré-visualização antes de gravar.
+                </p>
+
+                <form method="post" enctype="multipart/form-data" class="filters-form" style="margin-top:20px">
+                    <input type="hidden" name="action" value="preview_codes">
+                    <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="MAX_FILE_SIZE" value="<?= e($config['upload']['max_bytes']) ?>">
+                    <div class="field search-field">
+                        <label for="codes">Lista de CRT (CSV)</label>
+                        <input class="input" id="codes" name="codes" type="file" accept=".csv,text/csv,text/plain" required>
                     </div>
                     <div class="filter-actions">
                         <button class="btn btn-primary" type="submit">Pré-visualizar</button>
