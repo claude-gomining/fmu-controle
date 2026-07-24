@@ -84,8 +84,8 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $importer = new ActivityImporter($config['upload']['max_rows']);
             $parsed = $importer->parseCsv($tmpPath);
 
-            if ($parsed['activities'] === []) {
-                flash_set('error', 'Nenhuma linha válida encontrada no arquivo (todas sem CRT ou em branco).');
+            if ($parsed['activities'] === [] && $parsed['rejected'] === []) {
+                flash_set('error', 'Nenhuma linha válida encontrada no arquivo (todas em branco).');
                 redirect_to('admin.php');
             }
 
@@ -121,10 +121,11 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'new' => $newCount,
                     'existing' => count($parsed['activities']) - $newCount,
                     'duplicates' => $parsed['duplicates'],
-                    'invalid' => $parsed['invalid'],
+                    'rejected' => count($parsed['rejected']),
                     'rows' => $parsed['dataRows'],
                 ],
                 'sample' => $sample,
+                'rejected' => $parsed['rejected'],
             ];
         } catch (ImportException $exception) {
             flash_set('error', $exception->getMessage());
@@ -163,7 +164,17 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $notified = $notifier->notifyCreated($newCodes) && $notifier->notifyEnabled($newCodes);
             }
 
+            $rejected = is_array($preview['rejected'] ?? null) ? $preview['rejected'] : [];
+
+            if ($rejected !== []) {
+                $_SESSION['last_rejected'] = $rejected;
+            }
+
             $message = sprintf('%d disciplina(s) adicionada(s); %d já cadastrada(s).', $inserted, $existing);
+
+            if ($rejected !== []) {
+                $message .= sprintf(' %d linha(s) não importada(s) por CRT inválido.', count($rejected));
+            }
 
             if (!$notified) {
                 flash_set('error', $message . ' Atenção: não foi possível registrar/ativar todas no serviço de correção automática.');
@@ -212,9 +223,11 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'new' => $newCount,
                     'existing' => count($parsed['codes']) - $newCount,
                     'duplicates' => $parsed['duplicates'],
+                    'rejected' => count($parsed['rejected']),
                     'lines' => $parsed['lines'],
                 ],
                 'sample' => $sample,
+                'rejected' => $parsed['rejected'],
             ];
         } catch (ImportException $exception) {
             flash_set('error', $exception->getMessage());
@@ -253,7 +266,17 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $notified = $notifier->notifyCreated($newCodes) && $notifier->notifyDisabled($newCodes);
             }
 
+            $rejected = is_array($preview['rejected'] ?? null) ? $preview['rejected'] : [];
+
+            if ($rejected !== []) {
+                $_SESSION['last_rejected'] = $rejected;
+            }
+
             $message = sprintf('%d código(s) cadastrado(s) como Inativa; %d já cadastrado(s).', $inserted, $existing);
+
+            if ($rejected !== []) {
+                $message .= sprintf(' %d linha(s) não importada(s) por CRT inválido.', count($rejected));
+            }
 
             if (!$notified) {
                 flash_set('error', $message . ' Atenção: não foi possível registrar/desativar todos no serviço de correção automática.');
@@ -290,8 +313,44 @@ function admin_pending_preview(string $key): ?array
     return null;
 }
 
+/**
+ * Renderiza a tabela das linhas não importadas (CRT inválido).
+ *
+ * @param list<array{line:int, crt:string, reason:string}> $rejected
+ */
+function render_rejected_table(array $rejected): void
+{
+    if ($rejected === []) {
+        return;
+    }
+    ?>
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto">
+        <table>
+            <thead>
+            <tr><th>Linha</th><th>CRT</th><th>Motivo</th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($rejected as $r): ?>
+                <tr>
+                    <td><?= e($r['line'] ?? '') ?></td>
+                    <td><code><?= e(($r['crt'] ?? '') !== '' ? $r['crt'] : '(vazio)') ?></code></td>
+                    <td><?= e($r['reason'] ?? '') ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php
+}
+
 $preview = $isAdmin ? admin_pending_preview('import_preview') : null;
 $codesPreview = $isAdmin ? admin_pending_preview('import_codes_preview') : null;
+
+$lastRejected = null;
+if ($isAdmin && isset($_SESSION['last_rejected']) && is_array($_SESSION['last_rejected'])) {
+    $lastRejected = $_SESSION['last_rejected'];
+    unset($_SESSION['last_rejected']);
+}
 ?>
 <!doctype html>
 <html lang="pt-BR">
@@ -337,6 +396,14 @@ $codesPreview = $isAdmin ? admin_pending_preview('import_codes_preview') : null;
             <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
         <?php endif; ?>
 
+        <?php if ($lastRejected !== null): ?>
+            <section class="table-card" style="padding:24px">
+                <h3 style="margin-top:0"><?= e(count($lastRejected)) ?> linha(s) NÃO importada(s) na última importação</h3>
+                <p class="login-copy">O CRT deve ser um texto <strong>sem espaços</strong>. Corrija estas linhas e importe novamente.</p>
+                <?php render_rejected_table($lastRejected); ?>
+            </section>
+        <?php endif; ?>
+
         <?php if (!$isAdmin): ?>
             <section class="table-card">
                 <div class="empty-state" style="padding:32px">
@@ -353,7 +420,7 @@ $codesPreview = $isAdmin ? admin_pending_preview('import_codes_preview') : null;
                     <div><strong style="font-size:24px"><?= e($s['new']) ?></strong><br>linha(s) com dados <strong>novos</strong> (serão adicionadas)</div>
                     <div><strong style="font-size:24px"><?= e($s['existing']) ?></strong><br>ID(s) <strong>já cadastrados</strong> (não serão adicionados)</div>
                     <div><strong style="font-size:24px"><?= e($s['duplicates']) ?></strong><br>ID(s) repetidos no próprio arquivo (ignorados)</div>
-                    <div><strong style="font-size:24px"><?= e($s['invalid']) ?></strong><br>linha(s) sem CRT (ignoradas)</div>
+                    <div><strong style="font-size:24px"><?= e($s['rejected']) ?></strong><br>linha(s) <strong>não importadas</strong> (CRT vazio ou com espaço)</div>
                 </div>
 
                 <h3>Confira o mapeamento das colunas</h3>
@@ -390,6 +457,12 @@ $codesPreview = $isAdmin ? admin_pending_preview('import_codes_preview') : null;
                     <p class="login-copy"><small>Mostrando as primeiras <?= e(count($preview['sample'])) ?> linhas de <?= e($s['rows']) ?>.</small></p>
                 <?php endif; ?>
 
+                <?php if (($preview['rejected'] ?? []) !== []): ?>
+                    <h3>Linhas que NÃO serão importadas (<?= e(count($preview['rejected'])) ?>)</h3>
+                    <p class="login-copy">CRT com espaço ou vazio. Corrija na planilha para incluí-las.</p>
+                    <?php render_rejected_table($preview['rejected']); ?>
+                <?php endif; ?>
+
                 <div class="filter-actions" style="margin-top:20px;display:flex;gap:10px">
                     <form method="post">
                         <input type="hidden" name="action" value="confirm_import">
@@ -413,6 +486,7 @@ $codesPreview = $isAdmin ? admin_pending_preview('import_codes_preview') : null;
                     <div><strong style="font-size:24px"><?= e($cs['new']) ?></strong><br>código(s) <strong>novos</strong> (serão cadastrados como <strong>Inativa</strong>)</div>
                     <div><strong style="font-size:24px"><?= e($cs['existing']) ?></strong><br>já cadastrados (não serão adicionados)</div>
                     <div><strong style="font-size:24px"><?= e($cs['duplicates']) ?></strong><br>repetidos no próprio arquivo (ignorados)</div>
+                    <div><strong style="font-size:24px"><?= e($cs['rejected']) ?></strong><br>código(s) <strong>não importados</strong> (com espaço)</div>
                 </div>
 
                 <p class="login-copy">Os códigos novos entram apenas com <strong>código e status Inativa</strong> — sem nome, bloco ou ano (aparecem como &ldquo;—&rdquo; na listagem).</p>
@@ -440,6 +514,12 @@ $codesPreview = $isAdmin ? admin_pending_preview('import_codes_preview') : null;
                 </div>
                 <?php if ($cs['lines'] > count($codesPreview['sample'])): ?>
                     <p class="login-copy"><small>Mostrando os primeiros <?= e(count($codesPreview['sample'])) ?> de <?= e($cs['lines']) ?>.</small></p>
+                <?php endif; ?>
+
+                <?php if (($codesPreview['rejected'] ?? []) !== []): ?>
+                    <h3>Códigos que NÃO serão cadastrados (<?= e(count($codesPreview['rejected'])) ?>)</h3>
+                    <p class="login-copy">CRT com espaço. Corrija a lista para incluí-los.</p>
+                    <?php render_rejected_table($codesPreview['rejected']); ?>
                 <?php endif; ?>
 
                 <div class="filter-actions" style="margin-top:20px;display:flex;gap:10px">

@@ -106,6 +106,21 @@ check($result['duplicates'] === 1, '1 CRT repetido contado como duplicado');
 $codigos = array_column($result['activities'], 'codigo_disciplina');
 check($codigos === ['FMU-0001', 'FMU-0002'], 'mantém a primeira ocorrência do CRT repetido');
 
+echo "importer: CRT com espaço não é importado\n";
+$result = $importer->parseCsv(csv_file(
+    "CRT;DISCIPLINA;BLOCO;ANO\n"
+    . "FMU-0001;Valida;A;2026\n"
+    . "FMU 0002;Com espaco;A;2026\n"
+    . "FMU\t0003;Com tab;A;2026\n"
+));
+check(array_column($result['activities'], 'codigo_disciplina') === ['FMU-0001'], 'apenas o CRT sem espaço é importado');
+check(count($result['rejected']) === 2, 'CRT com espaço e com tab são rejeitados');
+check($result['rejected'][0]['crt'] === 'FMU 0002' && str_contains($result['rejected'][0]['reason'], 'espaço'), 'linha rejeitada traz o CRT e o motivo');
+
+$result = $importer->parseCodesCsv(csv_file("FMU-1\nFMU 2\nFMU-3\n"));
+check($result['codes'] === ['FMU-1', 'FMU-3'], 'código com espaço fica de fora da lista');
+check(count($result['rejected']) === 1 && $result['rejected'][0]['crt'] === 'FMU 2', 'código com espaço é reportado como rejeitado');
+
 echo "importer: ANO não numérico e arquivo vazio\n";
 $result = $importer->parseCsv(csv_file("CRT;DISCIPLINA;BLOCO;ANO\nFMU-7;Nome;A;2026/1\n"));
 check($result['activities'][0]['ano'] === '2026/1', 'ANO não numérico é mantido como string (com trim)');

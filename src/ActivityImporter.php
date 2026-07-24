@@ -75,6 +75,7 @@ final class ActivityImporter
         $invalid = 0;
         $duplicates = 0;
         $dataRows = 0;
+        $rejected = [];
         $seen = [];
 
         while (($row = fgetcsv($stream, 0, ';', '"', '')) !== false) {
@@ -96,6 +97,13 @@ final class ActivityImporter
 
             if ($codigo === '') {
                 $invalid++;
+                $rejected[] = ['line' => $dataRows, 'crt' => '', 'reason' => 'CRT vazio'];
+                continue;
+            }
+
+            // O CRT deve ser um texto sem espaços em branco.
+            if (preg_match('/\s/u', $codigo) === 1) {
+                $rejected[] = ['line' => $dataRows, 'crt' => $codigo, 'reason' => 'CRT contém espaço'];
                 continue;
             }
 
@@ -125,6 +133,7 @@ final class ActivityImporter
             'invalid' => $invalid,
             'duplicates' => $duplicates,
             'dataRows' => $dataRows,
+            'rejected' => $rejected,
         ];
     }
 
@@ -156,6 +165,7 @@ final class ActivityImporter
         $codes = [];
         $duplicates = 0;
         $lines = 0;
+        $rejected = [];
         $seen = [];
 
         foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
@@ -177,6 +187,12 @@ final class ActivityImporter
                     throw new ImportException('O arquivo excede o limite de ' . $this->maxRows . ' códigos.');
                 }
 
+                // O CRT deve ser um texto sem espaços em branco.
+                if (preg_match('/\s/u', $code) === 1) {
+                    $rejected[] = ['line' => $lines, 'crt' => $code, 'reason' => 'CRT contém espaço'];
+                    continue;
+                }
+
                 $key = mb_strtolower($code);
 
                 if (isset($seen[$key])) {
@@ -189,7 +205,7 @@ final class ActivityImporter
             }
         }
 
-        if ($codes === []) {
+        if ($codes === [] && $rejected === []) {
             throw new ImportException('Nenhum código (CRT) encontrado no arquivo.');
         }
 
@@ -197,6 +213,7 @@ final class ActivityImporter
             'codes' => $codes,
             'duplicates' => $duplicates,
             'lines' => $lines,
+            'rejected' => $rejected,
         ];
     }
 }

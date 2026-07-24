@@ -253,6 +253,7 @@ CRT;DISCIPLINA;BLOCO;ANO
 Cada linha corresponde a uma disciplina. Regras de importação:
 
 - Cada célula sofre `trim` (espaços no início/fim são removidos).
+- O `CRT` deve ser um texto **sem espaços** (nem espaço em branco nem separação entre palavras). Linhas com CRT contendo espaço — ou vazio — **não são importadas**, e ao final da importação (e na pré-visualização) é exibida a lista das linhas não importadas, com o CRT e o motivo.
 - Disciplinas cujo `CRT` (codigo_disciplina) **ainda não existe** são adicionadas com status **`Ativa`**.
 - Disciplinas já cadastradas (mesmo `CRT`) **não são alteradas**.
 - Linhas em branco são ignoradas; linhas sem `CRT` são reportadas como ignoradas; `CRT` repetido no próprio arquivo é reportado como duplicado (só a primeira ocorrência é considerada).
