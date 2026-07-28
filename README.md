@@ -334,7 +334,13 @@ LTI_CONTROL_INSTITUTION_AFYA=afya    # institution do painel AFYA
 LTI_CONTROL_TIMEOUT_SECONDS=5
 ```
 
-Se o serviço LTI estiver indisponível, a alteração no banco **é mantida** e o portal exibe um aviso; o detalhe do erro fica no `error_log` do servidor. O envio usa `allow_url_fopen` (habilitado por padrão no PHP).
+### Envio em lotes
+
+As listas são enviadas em **lotes de 100 IDs por requisição** (configurável por `LTI_CONTROL_BATCH_SIZE`), evitando timeout e payloads grandes demais em importações com centenas/milhares de códigos. Cada lote é uma requisição independente: se um lote falha, os demais continuam.
+
+Se o serviço LTI estiver indisponível, a alteração no banco **é mantida** e o portal exibe um aviso com **exatamente quais IDs falharam** (os do lote com erro), além de um botão **"Tentar enviar novamente"** que reenvia só esses IDs. O detalhe do erro (método, status HTTP e o intervalo do lote) fica no `error_log` do servidor. O envio usa `allow_url_fopen` (habilitado por padrão no PHP).
+
+> No fluxo de criação, apenas os IDs **registrados com sucesso** seguem para o `enable`/`disable` — se o `POST` de um lote falhar, aqueles IDs não são ativados/desativados e entram na lista de falhas.
 
 ## Collections
 

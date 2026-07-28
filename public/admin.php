@@ -21,6 +21,16 @@ function admin_repository(array $config): DisciplineRepository
     ));
 }
 
+function admin_notifier(array $config): ActivityControlNotifier
+{
+    return new ActivityControlNotifier(
+        $config['lti_control']['base_url'],
+        $config['lti_control']['institution'],
+        $config['lti_control']['timeout_seconds'],
+        $config['lti_control']['batch_size']
+    );
+}
+
 /**
  * Valida o upload de um CSV e devolve o caminho temporário; em caso de erro,
  * grava a mensagem e redireciona (não retorna).
@@ -72,6 +82,40 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'cancel_codes') {
         unset($_SESSION['import_codes_preview']);
+        redirect_to('admin.php');
+    }
+
+    // Reenvia ao serviço LTI os IDs cujo lote falhou.
+    if ($action === 'retry_failed') {
+        $ids = array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) ($_POST['ids'] ?? ''))
+        ), static fn (string $id): bool => $id !== ''));
+        $enable = ($_POST['enable'] ?? '1') === '1';
+
+        if ($ids === []) {
+            flash_set('error', 'Nenhum ID para reenviar.');
+            redirect_to('admin.php');
+        }
+
+        try {
+            $stillFailed = admin_notifier($config)->registerAndApply($ids, $enable);
+
+            if ($stillFailed === []) {
+                flash_set('success', sprintf('%d ID(s) enviados com sucesso ao serviço de correção automática.', count($ids)));
+            } else {
+                $_SESSION['last_failed_ids'] = ['ids' => $stillFailed, 'enable' => $enable];
+                flash_set('error', sprintf(
+                    '%d de %d ID(s) ainda falharam no serviço de correção automática.',
+                    count($stillFailed),
+                    count($ids)
+                ));
+            }
+        } catch (Throwable $exception) {
+            error_log('Falha ao reenviar IDs ao serviço LTI: ' . $exception->getMessage());
+            flash_set('error', 'Não foi possível reenviar. Tente novamente mais tarde.');
+        }
+
         redirect_to('admin.php');
     }
 
@@ -152,16 +196,11 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $inserted = count($newCodes);
             $existing = count($preview['activities']) - $inserted;
 
-            // Atividades novas: primeiro criar no serviço LTI, depois ativar.
-            $notified = true;
+            // Atividades novas: primeiro criar no serviço LTI, depois ativar (em lotes).
+            $failedIds = [];
 
             if ($newCodes !== []) {
-                $notifier = new ActivityControlNotifier(
-                    $config['lti_control']['base_url'],
-                    $config['lti_control']['institution'],
-                    $config['lti_control']['timeout_seconds']
-                );
-                $notified = $notifier->notifyCreated($newCodes) && $notifier->notifyEnabled($newCodes);
+                $failedIds = admin_notifier($config)->registerAndApply($newCodes, true);
             }
 
             $rejected = is_array($preview['rejected'] ?? null) ? $preview['rejected'] : [];
@@ -170,14 +209,22 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['last_rejected'] = $rejected;
             }
 
+            if ($failedIds !== []) {
+                $_SESSION["last_failed_ids"] = ["ids" => $failedIds, "enable" => true];
+            }
+
             $message = sprintf('%d disciplina(s) adicionada(s); %d já cadastrada(s).', $inserted, $existing);
 
             if ($rejected !== []) {
                 $message .= sprintf(' %d linha(s) não importada(s) por CRT inválido.', count($rejected));
             }
 
-            if (!$notified) {
-                flash_set('error', $message . ' Atenção: não foi possível registrar/ativar todas no serviço de correção automática.');
+            if ($failedIds !== []) {
+                flash_set('error', $message . sprintf(
+                    ' Atenção: %d de %d não puderam ser registradas/ativadas no serviço de correção automática (veja a lista abaixo).',
+                    count($failedIds),
+                    count($newCodes)
+                ));
             } else {
                 flash_set('success', $message);
             }
@@ -254,16 +301,11 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $inserted = count($newCodes);
             $existing = count($preview['codes']) - $inserted;
 
-            // Atividades novas (inativas): primeiro criar no serviço LTI, depois desativar.
-            $notified = true;
+            // Atividades novas (inativas): criar no serviço LTI e depois desativar (em lotes).
+            $failedIds = [];
 
             if ($newCodes !== []) {
-                $notifier = new ActivityControlNotifier(
-                    $config['lti_control']['base_url'],
-                    $config['lti_control']['institution'],
-                    $config['lti_control']['timeout_seconds']
-                );
-                $notified = $notifier->notifyCreated($newCodes) && $notifier->notifyDisabled($newCodes);
+                $failedIds = admin_notifier($config)->registerAndApply($newCodes, false);
             }
 
             $rejected = is_array($preview['rejected'] ?? null) ? $preview['rejected'] : [];
@@ -272,14 +314,22 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['last_rejected'] = $rejected;
             }
 
+            if ($failedIds !== []) {
+                $_SESSION["last_failed_ids"] = ["ids" => $failedIds, "enable" => false];
+            }
+
             $message = sprintf('%d código(s) cadastrado(s) como Inativa; %d já cadastrado(s).', $inserted, $existing);
 
             if ($rejected !== []) {
                 $message .= sprintf(' %d linha(s) não importada(s) por CRT inválido.', count($rejected));
             }
 
-            if (!$notified) {
-                flash_set('error', $message . ' Atenção: não foi possível registrar/desativar todos no serviço de correção automática.');
+            if ($failedIds !== []) {
+                flash_set('error', $message . sprintf(
+                    ' Atenção: %d de %d não puderam ser registrados/desativados no serviço de correção automática (veja a lista abaixo).',
+                    count($failedIds),
+                    count($newCodes)
+                ));
             } else {
                 flash_set('success', $message);
             }
@@ -351,6 +401,12 @@ if ($isAdmin && isset($_SESSION['last_rejected']) && is_array($_SESSION['last_re
     $lastRejected = $_SESSION['last_rejected'];
     unset($_SESSION['last_rejected']);
 }
+
+$lastFailedIds = null;
+if ($isAdmin && isset($_SESSION['last_failed_ids']) && is_array($_SESSION['last_failed_ids'])) {
+    $lastFailedIds = $_SESSION['last_failed_ids'];
+    unset($_SESSION['last_failed_ids']);
+}
 ?>
 <!doctype html>
 <html lang="pt-BR">
@@ -394,6 +450,26 @@ if ($isAdmin && isset($_SESSION['last_rejected']) && is_array($_SESSION['last_re
 
         <?php if ($flash): ?>
             <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
+        <?php endif; ?>
+
+        <?php if ($lastFailedIds !== null): ?>
+            <?php $failedList = $lastFailedIds['ids']; ?>
+            <section class="table-card" style="padding:24px">
+                <h3 style="margin-top:0"><?= e(count($failedList)) ?> ID(s) com erro no serviço de correção automática</h3>
+                <p class="login-copy">
+                    Estes IDs <strong>foram gravados no banco</strong>, mas o lote deles falhou ao ser enviado ao serviço externo
+                    (<?= $lastFailedIds['enable'] ? 'registrar e ativar' : 'registrar e desativar' ?>).
+                    Reenviar o arquivo não repete o envio (eles já existem no banco) — use o botão abaixo para tentar novamente.
+                </p>
+                <textarea class="input" rows="6" readonly style="width:100%;font-family:monospace"><?= e(implode("\n", $failedList)) ?></textarea>
+                <form method="post" style="margin-top:12px">
+                    <input type="hidden" name="action" value="retry_failed">
+                    <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="ids" value="<?= e(implode(',', $failedList)) ?>">
+                    <input type="hidden" name="enable" value="<?= $lastFailedIds['enable'] ? '1' : '0' ?>">
+                    <button class="btn btn-primary" type="submit">Tentar enviar novamente</button>
+                </form>
+            </section>
         <?php endif; ?>
 
         <?php if ($lastRejected !== null): ?>

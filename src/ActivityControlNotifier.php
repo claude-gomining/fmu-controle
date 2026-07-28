@@ -11,13 +11,21 @@ declare(strict_types=1);
  *
  * Em todos, o payload é {"activityId": "id1,id2,...", "institution": "..."}.
  * Ao criar/importar uma atividade, chame notifyCreated ANTES de notifyEnabled.
+ *
+ * As listas são enviadas em LOTES (padrão: 100 IDs por requisição), para não
+ * estourar timeout/limite de payload do serviço. Os IDs dos lotes que falharem
+ * ficam disponíveis em lastFailedCodes().
  */
 final class ActivityControlNotifier
 {
+    /** @var list<string> IDs dos lotes que falharam na última chamada */
+    private array $lastFailedCodes = [];
+
     public function __construct(
         private readonly string $baseUrl,
         private readonly string $institution,
-        private readonly int $timeoutSeconds = 5
+        private readonly int $timeoutSeconds = 5,
+        private readonly int $batchSize = 100
     ) {
     }
 
@@ -36,14 +44,72 @@ final class ActivityControlNotifier
         return $this->request('PUT', '/v1/control/disable/list', $codes);
     }
 
+    /**
+     * IDs que não puderam ser enviados na última chamada (lotes com falha).
+     *
+     * @return list<string>
+     */
+    public function lastFailedCodes(): array
+    {
+        return $this->lastFailedCodes;
+    }
+
+    /**
+     * Fluxo de criação: registra (POST /v1/control/list) e depois ativa ou
+     * desativa apenas os IDs que foram registrados com sucesso.
+     *
+     * @param list<string|int> $codes
+     * @return list<string> IDs que falharam (vazio = todos processados)
+     */
+    public function registerAndApply(array $codes, bool $enable): array
+    {
+        $codes = $this->sanitizeCodes($codes);
+
+        if ($codes === []) {
+            return [];
+        }
+
+        $this->notifyCreated($codes);
+        $failed = $this->lastFailedCodes();
+
+        // Só ativa/desativa o que foi registrado com sucesso.
+        $registered = array_values(array_diff($codes, $failed));
+
+        if ($registered !== []) {
+            $enable ? $this->notifyEnabled($registered) : $this->notifyDisabled($registered);
+            $failed = array_merge($failed, $this->lastFailedCodes());
+        }
+
+        return array_values(array_unique($failed));
+    }
+
     private function request(string $method, string $path, array $codes): bool
     {
+        $this->lastFailedCodes = [];
         $codes = $this->sanitizeCodes($codes);
 
         if ($codes === []) {
             return true;
         }
 
+        $batchSize = max(1, $this->batchSize);
+        $ok = true;
+
+        foreach (array_chunk($codes, $batchSize) as $batch) {
+            if (!$this->sendBatch($method, $path, $batch)) {
+                $ok = false;
+                array_push($this->lastFailedCodes, ...$batch);
+            }
+        }
+
+        return $ok;
+    }
+
+    /**
+     * @param list<string> $codes
+     */
+    private function sendBatch(string $method, string $path, array $codes): bool
+    {
         $url = rtrim($this->baseUrl, '/') . $path;
         $payload = json_encode([
             'activityId' => implode(',', $codes),
@@ -61,9 +127,12 @@ final class ActivityControlNotifier
         ]);
 
         $body = @file_get_contents($url, false, $context);
+        $count = count($codes);
+        $first = $codes[0] ?? '';
+        $last = $codes[$count - 1] ?? '';
 
         if ($body === false) {
-            error_log("Falha ao notificar o serviço LTI ({$method} {$path}): sem resposta de {$url}");
+            error_log("Falha ao notificar o serviço LTI ({$method} {$path}): sem resposta; lote de {$count} ({$first}..{$last})");
 
             return false;
         }
@@ -71,7 +140,7 @@ final class ActivityControlNotifier
         $status = $this->responseStatus($http_response_header ?? []);
 
         if ($status < 200 || $status >= 300) {
-            error_log("Falha ao notificar o serviço LTI ({$method} {$path}): HTTP {$status} de {$url}");
+            error_log("Falha ao notificar o serviço LTI ({$method} {$path}): HTTP {$status}; lote de {$count} ({$first}..{$last})");
 
             return false;
         }

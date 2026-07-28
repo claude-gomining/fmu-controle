@@ -101,6 +101,54 @@ $request = last_request($logFile);
 $payload = $request !== null ? json_decode($request['body'], true) : null;
 check($payload !== null && $payload['activityId'] === 'FMU-0001,FMU-0002', 'payload saneado mantém apenas códigos válidos e únicos');
 
+echo "notifier: envio em lotes\n";
+file_put_contents($logFile, '');
+$batched = new ActivityControlNotifier("http://127.0.0.1:{$port}", 'fmu', 5, 100);
+$many = [];
+for ($i = 1; $i <= 250; $i++) {
+    $many[] = 'FMU-' . str_pad((string) $i, 4, '0', STR_PAD_LEFT);
+}
+check($batched->notifyCreated($many) === true, '250 códigos enviados com sucesso');
+$requests = array_filter(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: []);
+check(count($requests) === 3, '250 códigos geram 3 requisições (100+100+50)');
+$sizes = array_map(static function (string $line): int {
+    $r = json_decode($line, true);
+    $p = json_decode($r['body'], true);
+    return count(explode(',', $p['activityId']));
+}, array_values($requests));
+check($sizes === [100, 100, 50], 'lotes têm exatamente 100, 100 e 50 IDs');
+check($batched->lastFailedCodes() === [], 'nenhum ID falhou');
+
+echo "notifier: IDs do lote que falhou são reportados\n";
+file_put_contents($logFile, '');
+// O mock responde 500 quando o payload contém FAIL: colocamos no 2º lote (índice 120).
+$mixed = [];
+for ($i = 1; $i <= 150; $i++) {
+    $mixed[] = ($i === 120) ? 'FAIL' : 'ID-' . $i;
+}
+check($batched->notifyCreated($mixed) === false, 'retorna false quando um lote falha');
+$failed = $batched->lastFailedCodes();
+check(count($failed) === 50, 'apenas os 50 IDs do lote com falha são reportados');
+check(in_array('FAIL', $failed, true) && in_array('ID-101', $failed, true), 'IDs do lote com falha estão na lista');
+check(!in_array('ID-1', $failed, true), 'IDs do lote bem-sucedido NÃO entram na lista');
+check(count(array_filter(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [])) === 2, 'os dois lotes foram enviados mesmo com falha no segundo');
+
+echo "notifier: registerAndApply (criar -> ativar)\n";
+file_put_contents($logFile, '');
+$failed = $batched->registerAndApply(['A-1', 'A-2'], true);
+check($failed === [], 'sem falhas retorna lista vazia');
+$reqs = array_values(array_filter(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: []));
+check(count($reqs) === 2, 'faz duas chamadas (create + enable)');
+$first = json_decode($reqs[0], true);
+$second = json_decode($reqs[1], true);
+check($first['uri'] === '/v1/control/list' && $first['method'] === 'POST', 'primeiro POST /v1/control/list');
+check($second['uri'] === '/v1/control/enable/list' && $second['method'] === 'PUT', 'depois PUT enable/list');
+
+file_put_contents($logFile, '');
+$failed = $batched->registerAndApply(['FAIL', 'B-2'], false);
+check($failed === ['FAIL', 'B-2'], 'falha no create reporta os IDs e não tenta desativar');
+check(count(array_filter(file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [])) === 1, 'não envia o disable quando o create falhou');
+
 echo "notifier: casos de falha\n";
 $before = count(file($logFile) ?: []);
 check($notifier->notifyEnabled([]) === true, 'lista vazia retorna true sem enviar requisição');

@@ -27,23 +27,25 @@ $canvasCollection = $config['canvas']['collection'];
 const BLUEPRINT_PREVIEW_TTL = 900; // 15 min
 
 /**
- * Cria e ativa no serviço LTI (institution afya) os cursos novos.
+ * Cria e ativa no serviço LTI (institution afya) os cursos novos, em lotes.
  *
  * @param list<int> $ids
+ * @return list<string> IDs cujo lote falhou (vazio = tudo certo)
  */
-function notify_new_courses(array $config, array $ids): bool
+function notify_new_courses(array $config, array $ids): array
 {
     if ($ids === []) {
-        return true;
+        return [];
     }
 
     $notifier = new ActivityControlNotifier(
         $config['lti_control']['base_url'],
         $config['lti_control']['institution_afya'],
-        $config['lti_control']['timeout_seconds']
+        $config['lti_control']['timeout_seconds'],
+        $config['lti_control']['batch_size']
     );
 
-    return $notifier->notifyCreated($ids) && $notifier->notifyEnabled($ids);
+    return $notifier->registerAndApply($ids, true);
 }
 
 function canvas_repository(array $config): BlueprintRepository
@@ -134,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $config['canvas']['base_url'],
                 $preview['courses']
             );
-            $notified = notify_new_courses($config, $result['added_ids']);
+            $failedIds = notify_new_courses($config, $result['added_ids']);
 
             $message = sprintf(
                 'Blueprint %s cadastrada: %d curso(s) adicionado(s) e ativado(s); %d no total.',
@@ -143,10 +145,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $result['total']
             );
 
-            if ($notified) {
+            if ($failedIds === []) {
                 flash_set('success', $message);
             } else {
-                flash_set('error', $message . ' Atenção: não foi possível registrar/ativar os novos cursos no serviço de correção automática.');
+                flash_set('error', $message . sprintf(
+                    ' Atenção: %d curso(s) não puderam ser registrados/ativados no serviço de correção automática: %s',
+                    count($failedIds),
+                    implode(', ', array_slice($failedIds, 0, 20)) . (count($failedIds) > 20 ? '…' : '')
+                ));
             }
         } catch (Throwable $exception) {
             error_log('Falha ao cadastrar blueprint do Canvas: ' . $exception->getMessage());
@@ -175,14 +181,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $courses = canvas_client($config)->fetchAssociatedCourses($blueprintId);
             $result = $repository->saveBlueprintCourses($blueprintId, $config['canvas']['base_url'], $courses);
-            $notified = notify_new_courses($config, $result['added_ids']);
+            $failedIds = notify_new_courses($config, $result['added_ids']);
 
             $message = sprintf('Blueprint %s atualizada: %d curso(s) novo(s), %d no total.', $blueprintId, $result['added'], $result['total']);
 
-            if ($notified) {
+            if ($failedIds === []) {
                 flash_set('success', $message);
             } else {
-                flash_set('error', $message . ' Atenção: não foi possível registrar/ativar os novos cursos no serviço de correção automática.');
+                flash_set('error', $message . sprintf(
+                    ' Atenção: %d curso(s) não puderam ser registrados/ativados no serviço de correção automática: %s',
+                    count($failedIds),
+                    implode(', ', array_slice($failedIds, 0, 20)) . (count($failedIds) > 20 ? '…' : '')
+                ));
             }
         } catch (CanvasException $exception) {
             flash_set('error', $exception->getMessage());
