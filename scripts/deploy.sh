@@ -11,9 +11,30 @@
 #   nem pede senhas de login (os usuários já existem no MongoDB).
 # - As variáveis ficam em /etc/fmu-portal.env e são lidas pelo próprio app.
 #
-# Uso:  sudo bash scripts/deploy.sh
+# Uso:
+#   sudo bash scripts/deploy.sh                  # interativo (pergunta a configuração)
+#   sudo bash scripts/deploy.sh --reuse-config   # não pergunta nada; usa a config existente
+#
+# O modo --reuse-config (aliases: --no-config, -y) apenas atualiza os arquivos
+# publicados e as dependências, mantendo o /etc/fmu-portal.env intacto. Ideal
+# para reimplantar uma nova versão do código num servidor já configurado.
 #
 set -uo pipefail
+
+REUSE_CONFIG=0
+for arg in "$@"; do
+    case "$arg" in
+        --reuse-config|--no-config|-y|--yes) REUSE_CONFIG=1 ;;
+        -h|--help)
+            sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            printf 'Opção desconhecida: %s (use --help)\n' "$arg" >&2
+            exit 1
+            ;;
+    esac
+done
 
 WEBROOT="${FMU_WEBROOT:-/var/www/html}"     # arquivos interativos (public/)
 APP_DIR="${FMU_APP_DIR:-/var/www}"          # backend: /var/www/src e /var/www/config
@@ -47,46 +68,92 @@ ask_yesno() {
 pkg_installed() { dpkg -s "$1" >/dev/null 2>&1; }
 have_ext() { php -m 2>/dev/null | grep -qi "^$1$"; }
 
+# Lê uma variável do arquivo de ambiente já existente (vazio se não houver).
+env_get() {
+    local key="$1" line val
+    [ -f "$ENV_FILE" ] || { printf ''; return; }
+    line="$($SUDO grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1)"
+    [ -z "$line" ] && { printf ''; return; }
+    val="${line#*=}"
+    val="${val%\"}"; val="${val#\"}"
+    val="${val%\'}"; val="${val#\'}"
+    printf '%s' "$val"
+}
+
 # --------------------------------------------------------------------------
 # 1. Coletar os dados de configuração (servidor novo)
 # --------------------------------------------------------------------------
 info "=== Deploy do Portal FMU/Canvas (Apache, sem SSL) ==="
-say "Informe os dados de configuração. Enter aceita o padrão entre colchetes."
-say ""
 
-if command -v php >/dev/null 2>&1; then
-    PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
-else
-    PHPV="$(ask 'Versão do PHP a instalar' '8.3')"
-fi
-
-info "-- MongoDB (servidor externo, onde os usuários já existem) --"
-MONGODB_URI="$(ask_secret 'MONGODB_URI (string de conexão completa; entrada oculta)')"
-while [ -z "$MONGODB_URI" ]; do
-    warn "A MONGODB_URI é obrigatória."
-    MONGODB_URI="$(ask_secret 'MONGODB_URI')"
-done
-MONGODB_DATABASE="$(ask 'Banco de dados' 'activity')"
-
-info "-- Canvas (painel Afya) --"
-CANVAS_BASE_URL="$(ask 'Host do Canvas' 'https://afya.instructure.com')"
-CANVAS_API_TOKEN="$(ask_secret 'Token do Canvas (entrada oculta; vazio p/ configurar depois)')"
-
-info "-- Geral --"
-APP_TIMEZONE="$(ask 'Fuso horário' 'America/Sao_Paulo')"
 LOGIN_THROTTLE_DIR="/var/lib/fmu-portal/throttle"
 
-COLL_ACTIVITY="fmu_activity_control"; COLL_USER="fmu_user_control"; COLL_CANVAS="canvas_blueprints"
-ADMIN_USERS=""; LTI_CONTROL_BASE_URL=""; LTI_CONTROL_INSTITUTION=""
-if ask_yesno "Configurar opções avançadas (coleções, admin, LTI)?" "n"; then
-    COLL_ACTIVITY="$(ask 'Collection de disciplinas' "$COLL_ACTIVITY")"
-    COLL_USER="$(ask 'Collection de usuários' "$COLL_USER")"
-    COLL_CANVAS="$(ask 'Collection de blueprints' "$COLL_CANVAS")"
-    ADMIN_USERS="$(ask 'Logins com acesso ao upload (vazio = padrão gomining)' '')"
-    LTI_CONTROL_BASE_URL="$(ask 'URL do serviço LTI (vazio = padrão)' '')"
-    LTI_CONTROL_INSTITUTION="$(ask 'institution do LTI (vazio = padrão)' '')"
+if [ "$REUSE_CONFIG" -eq 1 ]; then
+    # ----- Modo sem perguntas: usa a configuração já cadastrada -----
+    say "Modo --reuse-config: nenhuma configuração será solicitada."
+
+    if [ ! -f "$ENV_FILE" ]; then
+        err "Não existe configuração em $ENV_FILE."
+        err "Rode o deploy interativo (sudo bash scripts/deploy.sh) ou o"
+        err "scripts/configure-env.sh antes de usar --reuse-config."
+        exit 1
+    fi
+
+    if [ -z "$(env_get MONGODB_URI)" ]; then
+        err "MONGODB_URI não está definida em $ENV_FILE."
+        err "Complete a configuração com scripts/configure-env.sh e tente de novo."
+        exit 1
+    fi
+
+    existing_throttle="$(env_get LOGIN_THROTTLE_DIR)"
+    [ -n "$existing_throttle" ] && LOGIN_THROTTLE_DIR="$existing_throttle"
+
+    ok "Configuração existente em $ENV_FILE será mantida (não será alterada)."
+    say ""
+
+    if command -v php >/dev/null 2>&1; then
+        PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+    else
+        PHPV="${FMU_PHP_VERSION:-8.3}"
+        say "PHP não instalado — será instalado o php${PHPV} (defina FMU_PHP_VERSION para mudar)."
+    fi
+else
+    # ----- Modo interativo: coleta os dados -----
+    say "Informe os dados de configuração. Enter aceita o padrão entre colchetes."
+    say ""
+
+    if command -v php >/dev/null 2>&1; then
+        PHPV="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+    else
+        PHPV="$(ask 'Versão do PHP a instalar' '8.3')"
+    fi
+
+    info "-- MongoDB (servidor externo, onde os usuários já existem) --"
+    MONGODB_URI="$(ask_secret 'MONGODB_URI (string de conexão completa; entrada oculta)')"
+    while [ -z "$MONGODB_URI" ]; do
+        warn "A MONGODB_URI é obrigatória."
+        MONGODB_URI="$(ask_secret 'MONGODB_URI')"
+    done
+    MONGODB_DATABASE="$(ask 'Banco de dados' 'activity')"
+
+    info "-- Canvas (painel Afya) --"
+    CANVAS_BASE_URL="$(ask 'Host do Canvas' 'https://afya.instructure.com')"
+    CANVAS_API_TOKEN="$(ask_secret 'Token do Canvas (entrada oculta; vazio p/ configurar depois)')"
+
+    info "-- Geral --"
+    APP_TIMEZONE="$(ask 'Fuso horário' 'America/Sao_Paulo')"
+
+    COLL_ACTIVITY="fmu_activity_control"; COLL_USER="fmu_user_control"; COLL_CANVAS="canvas_blueprints"
+    ADMIN_USERS=""; LTI_CONTROL_BASE_URL=""; LTI_CONTROL_INSTITUTION=""
+    if ask_yesno "Configurar opções avançadas (coleções, admin, LTI)?" "n"; then
+        COLL_ACTIVITY="$(ask 'Collection de disciplinas' "$COLL_ACTIVITY")"
+        COLL_USER="$(ask 'Collection de usuários' "$COLL_USER")"
+        COLL_CANVAS="$(ask 'Collection de blueprints' "$COLL_CANVAS")"
+        ADMIN_USERS="$(ask 'Logins com acesso ao upload (vazio = padrão gomining)' '')"
+        LTI_CONTROL_BASE_URL="$(ask 'URL do serviço LTI (vazio = padrão)' '')"
+        LTI_CONTROL_INSTITUTION="$(ask 'institution do LTI (vazio = padrão)' '')"
+    fi
+    say ""
 fi
-say ""
 
 # --------------------------------------------------------------------------
 # 2. Instalar dependências (apenas o que faltar) — Apache + mod_php + extensões
@@ -153,11 +220,16 @@ say ""
 info "[3/4] Gravando variáveis e pastas graváveis..."
 
 write_env=1
-if [ -f "$ENV_FILE" ]; then
+if [ "$REUSE_CONFIG" -eq 1 ]; then
+    write_env=0
+    ok "Configuração preservada em $ENV_FILE (modo --reuse-config)."
+elif [ -f "$ENV_FILE" ]; then
     if ask_yesno "$ENV_FILE já existe. Sobrescrever com os novos dados?" "n"; then
         $SUDO cp -a "$ENV_FILE" "${ENV_FILE}.bak.$(date '+%Y%m%d%H%M%S')" 2>/dev/null || true
     else
         write_env=0
+        existing_throttle="$(env_get LOGIN_THROTTLE_DIR)"
+        [ -n "$existing_throttle" ] && LOGIN_THROTTLE_DIR="$existing_throttle"
         ok "Mantendo o $ENV_FILE existente."
     fi
 fi

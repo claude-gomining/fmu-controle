@@ -73,6 +73,14 @@ Ele:
 4. **Grava as variáveis em `/etc/fmu-portal.env`** (permissão `640`, `root:www-data`) — lidas pelo próprio app; e cria a pasta de throttle.
 5. Deixa o **código como somente-leitura** para o usuário do servidor web.
 
+**Reimplantar sem reconfigurar** (servidor já configurado — atualizar só o código):
+
+```bash
+sudo bash scripts/deploy.sh --reuse-config
+```
+
+Nesse modo o script **não pergunta nada**: mantém o `/etc/fmu-portal.env` intacto, apenas republica os arquivos e garante as dependências. Se ainda não houver configuração (ou faltar a `MONGODB_URI`), ele avisa e aborta sem alterar nada — use o modo interativo ou o `configure-env.sh` antes. Aliases: `--no-config`, `-y`.
+
 Características importantes:
 
 - Roda no **Apache usando o site padrão** (`/var/www/html`) com **mod_php** — **não cria virtual host, não mexe em portas nem em serviços**, e **não configura SSL**.
