@@ -25,9 +25,9 @@ final class DisciplineRepository
         $skip = ($page - 1) * $perPage;
 
         $query = new MongoDB\Driver\Query($filter, [
+            // Mais recentemente alterada/criada primeiro (campo `data`); código como desempate.
             'sort' => [
-                'nome_disciplina' => 1,
-                'Nome da disciplina' => 1,
+                'data' => -1,
                 'codigo_disciplina' => 1,
             ],
             'skip' => $skip,
