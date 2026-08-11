@@ -272,6 +272,61 @@ final class DisciplineRepository
         return $newCodes;
     }
 
+    /**
+     * Cadastra UMA disciplina. Apenas o código é obrigatório; nome, bloco e ano
+     * só são gravados quando informados. Não altera uma disciplina já existente.
+     *
+     * @return bool true se inseriu; false se o código já existia
+     */
+    public function insertSingleActivity(
+        string $code,
+        string $status,
+        string $name = '',
+        string $block = '',
+        string $year = ''
+    ): bool {
+        $code = trim($code);
+
+        if ($code === '') {
+            return false;
+        }
+
+        $document = [
+            'codigo_disciplina' => $code,
+            'status' => $status,
+            'data' => new MongoDB\BSON\UTCDateTime((int) (microtime(true) * 1000)),
+        ];
+
+        if (trim($name) !== '') {
+            $document['nome_disciplina'] = trim($name);
+        }
+
+        if (trim($block) !== '') {
+            $document['bloco'] = trim($block);
+        }
+
+        $year = trim($year);
+
+        if ($year !== '') {
+            $document['ano'] = ctype_digit($year) ? (int) $year : $year;
+        }
+
+        $bulk = new MongoDB\Driver\BulkWrite();
+        $bulk->update(
+            ['$or' => [
+                ['codigo_disciplina' => $code],
+                ['Codigo da Disciplina' => $code],
+                ['Código da Disciplina' => $code],
+            ]],
+            ['$setOnInsert' => $document],
+            ['upsert' => true]
+        );
+
+        $result = $this->connection->manager()->executeBulkWrite($this->connection->namespace(), $bulk);
+
+        return $result->getUpsertedCount() > 0;
+    }
+
     public function distinctBlocks(): array
     {
         $values = [];

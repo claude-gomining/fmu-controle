@@ -231,6 +231,7 @@ $totalPages = max(1, (int) ceil($pagination['total'] / $perPage));
                     <a class="nav-link" href="canvas.php">AFYA</a>
                 <?php endif; ?>
                 <?php if ($auth->isAdmin($config['admin']['users'])): ?>
+                    <a class="nav-link" href="nova-disciplina.php">Nova disciplina</a>
                     <a class="nav-link" href="admin.php">Administração</a>
                 <?php endif; ?>
             </nav>

@@ -119,6 +119,112 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_to('admin.php');
     }
 
+    // Processa UM lote da pré-visualização e devolve o progresso em JSON.
+    // Chamado repetidamente pelo modal de progresso (um lote por requisição).
+    if ($action === 'import_batch') {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $kind = ($_POST['kind'] ?? '') === 'codes' ? 'codes' : 'activities';
+        $offset = max(0, (int) ($_POST['offset'] ?? 0));
+        $sessionKey = $kind === 'codes' ? 'import_codes_preview' : 'import_preview';
+        $preview = $_SESSION[$sessionKey] ?? null;
+
+        if (!is_array($preview) || (time() - (int) ($preview['ts'] ?? 0)) > IMPORT_PREVIEW_TTL) {
+            echo json_encode(['ok' => false, 'error' => 'A pré-visualização expirou. Envie o arquivo novamente.']);
+            exit;
+        }
+
+        $items = $kind === 'codes' ? ($preview['codes'] ?? []) : ($preview['activities'] ?? []);
+        $total = count($items);
+        $batchSize = max(1, (int) $config['lti_control']['batch_size']);
+        $slice = array_slice($items, $offset, $batchSize);
+
+        // Acumulador do progresso entre as requisições.
+        $acc = $preview['acc'] ?? ['inserted' => 0, 'existing' => 0, 'failed' => []];
+
+        try {
+            if ($slice !== []) {
+                $repository = admin_repository($config);
+
+                if ($kind === 'codes') {
+                    $newCodes = $repository->insertNewCodes($slice, 'Inativa');
+                } else {
+                    $newCodes = $repository->insertNewActivities($slice);
+                }
+
+                $acc['inserted'] += count($newCodes);
+                $acc['existing'] += count($slice) - count($newCodes);
+
+                if ($newCodes !== []) {
+                    $failed = admin_notifier($config)->registerAndApply($newCodes, $kind !== 'codes');
+                    $acc['failed'] = array_merge($acc['failed'], $failed);
+                }
+            }
+        } catch (Throwable $exception) {
+            error_log('Falha ao processar lote da importação: ' . $exception->getMessage());
+            echo json_encode(['ok' => false, 'error' => 'Falha ao gravar o lote. Tente novamente mais tarde.']);
+            exit;
+        }
+
+        $nextOffset = $offset + count($slice);
+        $done = $nextOffset >= $total || $slice === [];
+
+        if (!$done) {
+            $_SESSION[$sessionKey]['acc'] = $acc;
+
+            echo json_encode([
+                'ok' => true,
+                'done' => false,
+                'processed' => $nextOffset,
+                'total' => $total,
+                'next_offset' => $nextOffset,
+                'inserted' => $acc['inserted'],
+                'failed' => count($acc['failed']),
+            ]);
+            exit;
+        }
+
+        // Terminou: consolida o resultado, limpa a pré-visualização e prepara a mensagem.
+        $rejected = is_array($preview['rejected'] ?? null) ? $preview['rejected'] : [];
+        unset($_SESSION[$sessionKey]);
+
+        if ($rejected !== []) {
+            $_SESSION['last_rejected'] = $rejected;
+        }
+
+        if ($acc['failed'] !== []) {
+            $_SESSION['last_failed_ids'] = ['ids' => $acc['failed'], 'enable' => $kind !== 'codes'];
+        }
+
+        $message = $kind === 'codes'
+            ? sprintf('%d código(s) cadastrado(s) como Inativa; %d já cadastrado(s).', $acc['inserted'], $acc['existing'])
+            : sprintf('%d disciplina(s) adicionada(s); %d já cadastrada(s).', $acc['inserted'], $acc['existing']);
+
+        if ($rejected !== []) {
+            $message .= sprintf(' %d linha(s) não importada(s) por CRT inválido.', count($rejected));
+        }
+
+        if ($acc['failed'] !== []) {
+            flash_set('error', $message . sprintf(
+                ' Atenção: %d não puderam ser registrados no serviço de correção automática (veja a lista abaixo).',
+                count($acc['failed'])
+            ));
+        } else {
+            flash_set('success', $message);
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'done' => true,
+            'processed' => $total,
+            'total' => $total,
+            'inserted' => $acc['inserted'],
+            'failed' => count($acc['failed']),
+            'redirect' => 'admin.php',
+        ]);
+        exit;
+    }
+
     // ----- Planilha completa (CRT;DISCIPLINA;BLOCO;ANO): pré-visualização -----
     if ($action === 'preview') {
         $tmpPath = admin_uploaded_csv_path($_FILES['spreadsheet'] ?? null, $config);
@@ -429,6 +535,7 @@ if ($isAdmin && isset($_SESSION['last_failed_ids']) && is_array($_SESSION['last_
         <nav aria-label="Navegação principal">
             <a class="nav-link" href="index.php">Disciplinas</a>
             <?php if ($isAdmin): ?>
+                <a class="nav-link" href="nova-disciplina.php">Nova disciplina</a>
                 <a class="nav-link active" href="admin.php">Administração</a>
             <?php endif; ?>
         </nav>
@@ -540,7 +647,7 @@ if ($isAdmin && isset($_SESSION['last_failed_ids']) && is_array($_SESSION['last_
                 <?php endif; ?>
 
                 <div class="filter-actions" style="margin-top:20px;display:flex;gap:10px">
-                    <form method="post">
+                    <form method="post" data-batch-import="activities" data-total="<?= e(count($preview['activities'])) ?>">
                         <input type="hidden" name="action" value="confirm_import">
                         <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
                         <button class="btn btn-primary" type="submit"<?= $s['new'] === 0 ? ' disabled' : '' ?>>Confirmar e importar <?= e($s['new']) ?> nova(s)</button>
@@ -599,7 +706,7 @@ if ($isAdmin && isset($_SESSION['last_failed_ids']) && is_array($_SESSION['last_
                 <?php endif; ?>
 
                 <div class="filter-actions" style="margin-top:20px;display:flex;gap:10px">
-                    <form method="post">
+                    <form method="post" data-batch-import="codes" data-total="<?= e(count($codesPreview['codes'])) ?>">
                         <input type="hidden" name="action" value="confirm_codes">
                         <input type="hidden" name="_csrf_token" value="<?= e(csrf_token()) ?>">
                         <button class="btn btn-primary" type="submit"<?= $cs['new'] === 0 ? ' disabled' : '' ?>>Cadastrar <?= e($cs['new']) ?> como Inativa</button>
@@ -665,5 +772,112 @@ if ($isAdmin && isset($_SESSION['last_failed_ids']) && is_array($_SESSION['last_
         <?php endif; ?>
     </main>
 </div>
+
+<div id="import-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+    <div class="modal-card">
+        <div class="modal-spinner" aria-hidden="true"></div>
+        <h3 id="import-modal-title" class="modal-title">Enviando dados…</h3>
+        <p class="modal-sub">Não feche nem recarregue esta página até terminar.</p>
+        <div class="modal-bar"><div id="import-bar" class="modal-bar-fill" style="width:0%"></div></div>
+        <p id="import-counter" class="modal-counter">Preparando…</p>
+        <p id="import-rate" class="modal-rate"></p>
+        <p id="import-error" class="modal-error" hidden></p>
+    </div>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('import-modal');
+    var bar = document.getElementById('import-bar');
+    var counter = document.getElementById('import-counter');
+    var rate = document.getElementById('import-rate');
+    var errorBox = document.getElementById('import-error');
+    var running = false;
+
+    function fmtSeconds(s) {
+        if (!isFinite(s) || s < 0) { return '—'; }
+        if (s < 60) { return Math.round(s) + 's'; }
+        var m = Math.floor(s / 60);
+        return m + 'min ' + Math.round(s - m * 60) + 's';
+    }
+
+    document.querySelectorAll('form[data-batch-import]').forEach(function (form) {
+        form.addEventListener('submit', function (ev) {
+            if (running) { ev.preventDefault(); return; }
+            if (!window.fetch) { return; }  // sem fetch: envia do jeito tradicional
+
+            ev.preventDefault();
+            running = true;
+
+            var kind = form.getAttribute('data-batch-import');
+            var total = parseInt(form.getAttribute('data-total'), 10) || 0;
+            var token = form.querySelector('input[name="_csrf_token"]').value;
+            var button = form.querySelector('button[type="submit"]');
+            if (button) { button.disabled = true; }
+            document.querySelectorAll('form button').forEach(function (b) { b.disabled = true; });
+
+            modal.hidden = false;
+            errorBox.hidden = true;
+            var startedAt = Date.now();
+            var batches = 0;
+            var offset = 0;
+
+            function update(processed) {
+                var pct = total > 0 ? Math.round((processed / total) * 100) : 100;
+                bar.style.width = pct + '%';
+                counter.textContent = 'Lote ' + batches + ' enviado · ' + processed + ' de ' + total + ' (' + pct + '%)';
+                var elapsed = (Date.now() - startedAt) / 1000;
+                if (elapsed > 0 && processed > 0) {
+                    var speed = processed / elapsed;
+                    var remaining = (total - processed) / speed;
+                    rate.textContent = speed.toFixed(1) + ' itens/s · decorrido ' + fmtSeconds(elapsed)
+                        + (processed < total ? ' · restam ~' + fmtSeconds(remaining) : '');
+                }
+            }
+
+            function sendNext() {
+                var body = new URLSearchParams();
+                body.append('action', 'import_batch');
+                body.append('kind', kind);
+                body.append('offset', String(offset));
+                body.append('_csrf_token', token);
+
+                fetch('admin.php', {
+                    method: 'POST',
+                    body: body,
+                    credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                }).then(function (r) { return r.json(); }).then(function (data) {
+                    if (!data.ok) {
+                        errorBox.textContent = data.error || 'Falha ao enviar os dados.';
+                        errorBox.hidden = false;
+                        rate.textContent = '';
+                        counter.textContent = 'Interrompido.';
+                        running = false;
+                        return;
+                    }
+                    batches++;
+                    update(data.processed);
+                    if (data.done) {
+                        counter.textContent = 'Concluído: ' + data.processed + ' de ' + total + ' (100%)';
+                        window.location.href = data.redirect || 'admin.php';
+                        return;
+                    }
+                    offset = data.next_offset;
+                    sendNext();
+                }).catch(function () {
+                    errorBox.textContent = 'Conexão perdida. Os lotes já enviados foram gravados; reenvie o arquivo para continuar.';
+                    errorBox.hidden = false;
+                    counter.textContent = 'Interrompido.';
+                    rate.textContent = '';
+                    running = false;
+                });
+            }
+
+            sendNext();
+        });
+    });
+})();
+</script>
 </body>
 </html>

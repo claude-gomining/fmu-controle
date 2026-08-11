@@ -290,6 +290,16 @@ O envio **não grava nada de imediato**: primeiro é exibida uma pré-visualiza�
 
 Só depois de clicar em **Confirmar** é que as novas disciplinas são gravadas (e registradas/ativadas no serviço LTI). O botão **Cancelar** descarta a pré-visualização. A pré-visualização fica na sessão e expira em 15 minutos.
 
+### Modal de progresso (envio em lotes)
+
+Ao confirmar uma importação, abre-se um **modal bloqueante** com barra de progresso que envia **um lote por requisição** (o mesmo tamanho de lote do serviço LTI, padrão 100). A cada lote concluído o contador mostra: **lote enviado**, **processados / total (%)**, a **velocidade em itens/s**, o tempo decorrido e a estimativa restante.
+
+Como o modal cobre a tela e os botões são desabilitados, não há como enviar a mesma importação duas vezes. Além disso, cada lote é idempotente (só insere o que ainda não existe), então um reenvio acidental não duplica nada. Se o navegador não suportar `fetch`, o formulário cai no envio tradicional (tudo de uma vez).
+
+### Cadastrar uma disciplina individual
+
+A tela **Nova disciplina** (`nova-disciplina.php`, só para administradores) cadastra uma disciplina por vez. **Apenas o CRT é obrigatório** — nome, bloco e ano são opcionais e só são gravados quando preenchidos (em branco, aparecem como `—` na listagem). O CRT não pode conter espaços, e é possível escolher o status inicial (**Ativa** ou **Inativa**); o serviço LTI é notificado com **criar → ativar/desativar**. Se o CRT já existir, nada é alterado e o portal avisa.
+
 ### Cadastrar códigos como Inativa (lista de CRT)
 
 Há um segundo modo de importação que recebe **apenas uma lista de CRT** (um código por linha; também aceita separados por `;` ou `,`, e um cabeçalho `CRT` opcional). Os códigos ainda não cadastrados são adicionados com status **`Inativa`**, gravando **somente `codigo_disciplina` + `status`** — sem nome, bloco ou ano. Na listagem, esses registros aparecem com nome/bloco/ano como `—`. Também passa pela pré-visualização (novos × já existentes) antes de gravar, e no serviço LTI é feito **criar → desativar** para os novos.
