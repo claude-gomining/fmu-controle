@@ -119,7 +119,10 @@ final class ActivityControlNotifier
         $context = stream_context_create([
             'http' => [
                 'method' => $method,
-                'header' => "Content-Type: application/json\r\nAccept: application/json\r\n",
+                // User-Agent explícito: o PHP não envia por padrão e alguns
+                // WAF/proxies rejeitam (403) requisições sem esse header.
+                'header' => "Content-Type: application/json\r\nAccept: application/json\r\n"
+                    . "User-Agent: FMU-Portal/1.0 (+PHP)\r\n",
                 'content' => $payload,
                 'timeout' => $this->timeoutSeconds,
                 'ignore_errors' => true,

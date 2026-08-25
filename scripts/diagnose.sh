@@ -147,13 +147,25 @@ if [ -f "$APP_DIR/config/config.php" ]; then
         $base = rtrim($c["canvas"]["base_url"], "/");
         $token = $c["canvas"]["token"];
         if ($token === "") { echo "  \033[31m✗ Sem token: a chamada nem seria feita.\033[0m\n"; exit; }
+        // Aviso: espaços/aspas/quebras que tenham entrado no token pelo arquivo .env
+        if ($token !== trim($token)) {
+            echo "  \033[31m✗ O token tem espaços ou quebra de linha nas pontas — corrija o .env.\033[0m\n";
+        }
+        if (preg_match("/[\"\x27]/", $token)) {
+            echo "  \033[31m✗ O token contém aspas — provavelmente aspas duplicadas no .env.\033[0m\n";
+        }
+
         $bp = getenv("FMU_BP");
-        $url = $bp !== "" && ctype_digit($bp)
+        $isReal = $bp !== "" && ctype_digit($bp);
+        $url = $isReal
             ? "{$base}/api/v1/courses/{$bp}/blueprint_templates/default/associated_courses?per_page=1"
             : "{$base}/api/v1/users/self";
+        // Mesmos headers do CanvasClient (User-Agent incluso: sem ele o WAF devolve 403).
         $ctx = stream_context_create(["http" => [
             "method" => "GET",
-            "header" => "Authorization: Bearer {$token}\r\nAccept: application/json\r\n",
+            "header" => "Authorization: Bearer {$token}\r\n"
+                . "Accept: application/json\r\n"
+                . "User-Agent: FMU-Portal/1.0 (+PHP)\r\n",
             "timeout" => (int) $c["canvas"]["timeout_seconds"],
             "ignore_errors" => true,
         ]]);
@@ -168,7 +180,19 @@ if [ -f "$APP_DIR/config/config.php" ]; then
         } elseif ($status >= 200 && $status < 300) {
             echo "  \033[32m✓ HTTP {$status} em {$shown} — token e host OK.\033[0m\n";
         } elseif ($status === 401 || $status === 403) {
-            echo "  \033[31m✗ HTTP {$status} — token inválido/sem permissão PARA ESTE HOST ({$base}).\033[0m\n";
+            $d = json_decode((string) $body, true);
+            $why = $d["errors"][0]["message"] ?? ($d["message"] ?? trim(preg_replace("/\s+/", " ", strip_tags((string) $body))));
+            $why = mb_substr((string) $why, 0, 160);
+            if (!$isReal) {
+                echo "  \033[33m! HTTP {$status} em /api/v1/users/self — INCONCLUSIVO.\033[0m\n";
+                echo "     Esse endpoint exige permissões diferentes do endpoint de blueprint;\n";
+                echo "     um token válido para blueprints pode ser recusado aqui.\n";
+                echo "     Rode de novo passando o ID da blueprint, que é o teste que vale:\n";
+                echo "       sudo bash scripts/diagnose.sh SEU_ID_DE_BLUEPRINT\n";
+            } else {
+                echo "  \033[31m✗ HTTP {$status} no endpoint REAL de blueprint em {$base}.\033[0m\n";
+            }
+            if ($why !== "") { echo "     Canvas respondeu: {$why}\n"; }
         } elseif ($status === 404) {
             echo "  \033[31m✗ HTTP 404 — recurso não encontrado (blueprint inexistente nesse host?).\033[0m\n";
         } else {

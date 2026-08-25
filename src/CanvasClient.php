@@ -13,6 +13,8 @@ declare(strict_types=1);
  */
 final class CanvasClient
 {
+    private const USER_AGENT = 'FMU-Portal/1.0 (+PHP)';
+
     public function __construct(
         private readonly string $baseUrl,
         private readonly string $token,
@@ -50,7 +52,14 @@ final class CanvasClient
             $response = $this->httpGet($url);
 
             if ($response['status'] === 401 || $response['status'] === 403) {
-                throw new CanvasException('Token do Canvas inválido ou sem permissão para esta blueprint.');
+                // O corpo do Canvas costuma explicar o motivo (escopo insuficiente,
+                // token expirado, limite de requisições). Ajuda muito no diagnóstico.
+                $detail = $this->errorDetail($response['body']);
+
+                throw new CanvasException(
+                    'Token do Canvas inválido ou sem permissão para esta blueprint (HTTP '
+                    . $response['status'] . ')' . ($detail !== '' ? ': ' . $detail : '.')
+                );
             }
 
             if ($response['status'] === 404) {
@@ -95,14 +104,49 @@ final class CanvasClient
     }
 
     /**
+     * Extrai uma explicação curta do corpo de erro do Canvas, que costuma vir
+     * como {"errors":[{"message":"..."}]} ou {"message":"..."}. Nunca devolve
+     * o corpo inteiro (pode ser HTML de WAF).
+     */
+    private function errorDetail(string $body): string
+    {
+        $decoded = json_decode($body, true);
+
+        if (is_array($decoded)) {
+            if (isset($decoded['errors'][0]['message'])) {
+                return trim((string) $decoded['errors'][0]['message']);
+            }
+
+            if (isset($decoded['errors']) && is_string($decoded['errors'])) {
+                return trim($decoded['errors']);
+            }
+
+            if (isset($decoded['message'])) {
+                return trim((string) $decoded['message']);
+            }
+        }
+
+        // Resposta não-JSON (ex.: página de bloqueio do WAF): resumo curto.
+        $plain = trim(preg_replace('/\s+/', ' ', strip_tags($body)) ?? '');
+
+        return $plain === '' ? '' : mb_substr($plain, 0, 160);
+    }
+
+    /**
      * @return array{status:int, headers:list<string>, body:string}
      */
     private function httpGet(string $url): array
     {
+        // O User-Agent é obrigatório na prática: sem ele, o WAF/CDN na frente do
+        // Canvas costuma responder 403 (o PHP não envia esse header por padrão).
+        $headers = "Authorization: Bearer {$this->token}\r\n"
+            . "Accept: application/json\r\n"
+            . 'User-Agent: ' . self::USER_AGENT . "\r\n";
+
         $context = stream_context_create([
             'http' => [
                 'method' => 'GET',
-                'header' => "Authorization: Bearer {$this->token}\r\nAccept: application/json\r\n",
+                'header' => $headers,
                 'timeout' => $this->timeoutSeconds,
                 'ignore_errors' => true,
             ],
