@@ -128,6 +128,12 @@ return [
         'batch_size' => max(1, (int) env_value('LTI_CONTROL_BATCH_SIZE', '100')),
     ],
 
+    // API de consulta (somente leitura). Sem API_TOKEN definido, os endpoints
+    // aceitam apenas sessão autenticada — nunca ficam públicos por descuido.
+    'api' => [
+        'token' => (string) env_value('API_TOKEN', ''),
+    ],
+
     'security' => [
         'login_max_attempts' => max(1, (int) env_value('LOGIN_MAX_ATTEMPTS', '5')),
         'login_ip_max_attempts' => max(1, (int) env_value('LOGIN_IP_MAX_ATTEMPTS', '30')),

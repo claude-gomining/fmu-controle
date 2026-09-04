@@ -360,6 +360,66 @@ Se o serviço LTI estiver indisponível, a alteração no banco **é mantida** e
 
 > No fluxo de criação, apenas os IDs **registrados com sucesso** seguem para o `enable`/`disable` — se o `POST` de um lote falhar, aqueles IDs não são ativados/desativados e entram na lista de falhas.
 
+## API de consulta (AFYA)
+
+Endpoints somente leitura, em JSON, para consultar blueprints e cursos da AFYA.
+
+| O que | Chamada |
+|---|---|
+| Apenas o que está **ativo** | `GET /api-afya.php?status=ativa` |
+| Apenas o que está **inativo** | `GET /api-afya.php?status=inativa` |
+| **Todos**, com o status de cada um | `GET /api-afya.php` (ou `?status=todos`) |
+
+**Autenticação** — uma das duas:
+
+- `Authorization: Bearer <API_TOKEN>` (defina `API_TOKEN` no `/etc/fmu-portal.env`); ou
+- sessão do portal já autenticada e com acesso ao painel AFYA.
+
+Se `API_TOKEN` não estiver definido, **só a sessão é aceita** — o endpoint nunca fica público por descuido.
+
+```bash
+curl -sS -H "Authorization: Bearer $API_TOKEN" \
+  'https://controle.gomining-lti.com/api-afya.php?status=ativa'
+```
+
+Resposta:
+
+```json
+{
+  "ok": true,
+  "institution": "afya",
+  "filter": "Ativa",
+  "generated_at": "2026-07-24T01:30:00+00:00",
+  "summary": {
+    "blueprints": 2, "courses_returned": 2,
+    "courses_active": 2, "courses_inactive": 1
+  },
+  "blueprints": [
+    {
+      "blueprint_id": "130764",
+      "updated_at": "24/07/2026 01:20",
+      "active_count": 1, "inactive_count": 1,
+      "is_active": true, "course_count": 1,
+      "courses": [
+        {
+          "course_id": 136272, "name": "DIREITO CIVIL",
+          "course_code": "DIR-01", "sis_course_id": "194554",
+          "term_name": "2025/2", "status": "Ativa",
+          "collected_at": "24/07/2026 01:20"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Notas:
+
+- O status é **por curso** — não existe status no documento da blueprint. Por isso `is_active` de uma blueprint significa **"tem ao menos um curso ativo"**, e `active_count`/`inactive_count` mostram a composição.
+- `active_count` e `inactive_count` sempre refletem o **total** da blueprint, mesmo com filtro aplicado; já `courses` e `course_count` respeitam o filtro.
+- Com filtro, blueprints sem nenhum curso naquele status são omitidas.
+- Erros seguem o mesmo formato: `{"ok": false, "error": "..."}` com HTTP 400 (parâmetro inválido), 401 (não autorizado), 405 (método) ou 500.
+
 ## Collections
 
 ### `fmu_activity_control`

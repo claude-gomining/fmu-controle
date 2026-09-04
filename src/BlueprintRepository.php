@@ -322,6 +322,77 @@ final class BlueprintRepository
         return is_object($result) && isset($result->n) ? (int) $result->n : 0;
     }
 
+    /**
+     * Todas as blueprints com seus cursos, para consumo via API.
+     *
+     * @param string|null $status 'Ativa'/'Inativa' para filtrar os cursos;
+     *                            null devolve todos com o status de cada um.
+     *                            Blueprints sem nenhum curso no filtro são omitidas.
+     * @return list<array<string, mixed>>
+     */
+    public function allBlueprints(?string $status = null): array
+    {
+        $query = new MongoDB\Driver\Query([], ['sort' => ['blueprint_id' => 1]]);
+        $cursor = $this->connection->manager()->executeQuery($this->connection->namespace(), $query);
+
+        $blueprints = [];
+
+        foreach ($cursor as $document) {
+            $normalized = $this->normalizeBlueprint($document, '');
+            $summary = self::summarizeCourses($normalized['courses'], $status);
+
+            if ($status !== null && $summary['courses'] === []) {
+                continue;
+            }
+
+            $blueprints[] = [
+                'blueprint_id' => $normalized['blueprint_id'],
+                'updated_at' => $normalized['updated_at'],
+                'active_count' => $summary['active_count'],
+                'inactive_count' => $summary['inactive_count'],
+                'is_active' => $summary['active_count'] > 0,
+                'course_count' => count($summary['courses']),
+                'courses' => $summary['courses'],
+            ];
+        }
+
+        return $blueprints;
+    }
+
+    /**
+     * Filtra os cursos por status e conta ativos/inativos (sempre sobre o total,
+     * independentemente do filtro aplicado).
+     *
+     * @param list<array<string, mixed>> $courses
+     * @return array{courses:list<array<string, mixed>>, active_count:int, inactive_count:int}
+     */
+    public static function summarizeCourses(array $courses, ?string $status = null): array
+    {
+        $active = 0;
+        $inactive = 0;
+        $filtered = [];
+
+        foreach ($courses as $course) {
+            $courseStatus = (string) ($course['status'] ?? self::STATUS_NEW);
+
+            if ($courseStatus === 'Inativa') {
+                $inactive++;
+            } else {
+                $active++;
+            }
+
+            if ($status === null || $courseStatus === $status) {
+                $filtered[] = $course;
+            }
+        }
+
+        return [
+            'courses' => $filtered,
+            'active_count' => $active,
+            'inactive_count' => $inactive,
+        ];
+    }
+
     private function normalizeBlueprint(object $document, string $filter): array
     {
         $courses = [];

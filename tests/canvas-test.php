@@ -123,6 +123,25 @@ $byId = [];
 foreach ($merged['courses'] as $c) {
     $byId[$c['course_id']] = $c;
 }
+echo "BlueprintRepository::summarizeCourses (API)\n";
+$sample = [
+    ['course_id' => 1, 'status' => 'Ativa'],
+    ['course_id' => 2, 'status' => 'Inativa'],
+    ['course_id' => 3, 'status' => 'Ativa'],
+    ['course_id' => 4],  // sem status: conta como Ativa (padrão)
+];
+$all = BlueprintRepository::summarizeCourses($sample, null);
+check(count($all['courses']) === 4, 'sem filtro devolve todos os cursos');
+check($all['active_count'] === 3 && $all['inactive_count'] === 1, 'contagem de ativos/inativos correta (sem status = Ativa)');
+
+$onlyActive = BlueprintRepository::summarizeCourses($sample, 'Ativa');
+check(array_column($onlyActive['courses'], 'course_id') === [1, 3, 4], 'filtro Ativa devolve só os ativos');
+check($onlyActive['active_count'] === 3 && $onlyActive['inactive_count'] === 1, 'contadores refletem o TOTAL, não o filtro');
+
+$onlyInactive = BlueprintRepository::summarizeCourses($sample, 'Inativa');
+check(array_column($onlyInactive['courses'], 'course_id') === [2], 'filtro Inativa devolve só os inativos');
+check(BlueprintRepository::summarizeCourses([], 'Ativa')['courses'] === [], 'blueprint sem cursos devolve lista vazia');
+
 check($merged['added'] === 1, 'apenas 1 curso novo contabilizado');
 check($merged['added_ids'] === [300], 'added_ids contém apenas o course_id do curso novo');
 check(count($merged['courses']) === 3, 'mantém existente atualizado + novo + removido preservado');
