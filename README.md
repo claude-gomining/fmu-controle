@@ -45,6 +45,7 @@ Todas as configurações são lidas de variáveis de ambiente. As que têm padr�
 | `LTI_CONTROL_BASE_URL` | `http://prd-lti-activity-control.eba-ikyyadp3.us-east-2.elasticbeanstalk.com` | Serviço LTI notificado ao ativar/desativar disciplinas (painel FMU). |
 | `LTI_CONTROL_INSTITUTION` | `fmu` | Valor do campo `institution` no payload LTI. |
 | `LTI_CONTROL_TIMEOUT_SECONDS` | `5` | Timeout da chamada ao serviço LTI. |
+| `API_TOKEN` | *(vazio)* | Token da API de consulta (`api-afya.php`). Vazio = só sessão autenticada é aceita. |
 | `LOGIN_MAX_ATTEMPTS` | `5` | Tentativas de login por usuário+IP antes do bloqueio. |
 | `LOGIN_IP_MAX_ATTEMPTS` | `30` | Tentativas de login por IP antes do bloqueio. |
 | `LOGIN_LOCKOUT_SECONDS` | `900` (15 min) | Duração do bloqueio de login. |
